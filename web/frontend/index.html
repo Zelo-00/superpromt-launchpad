@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SuperPromt | PSQ Evaluation</title>
+    <style>
+        :root {
+            --bg: #0a0a0b;
+            --card-bg: #141417;
+            --lava: linear-gradient(135deg, #ff4d00, #ff8700);
+            --lava-solid: #ff4d00;
+            --blue: #0070f3;
+            --text: #e4e4e7;
+            --text-dim: #a1a1aa;
+            --border: #27272a;
+            --red: #ef4444;
+            --yellow: #f59e0b;
+            --green: #10b981;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            padding: 2rem 1rem;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+
+        h1 {
+            font-size: 3rem;
+            font-weight: 800;
+            background: var(--lava);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.5rem;
+        }
+
+        .subtitle {
+            color: var(--text-dim);
+            font-size: 1.1rem;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        textarea {
+            width: 100%;
+            height: 150px;
+            background: #000;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            padding: 1rem;
+            font-family: inherit;
+            font-size: 1rem;
+            resize: vertical;
+            margin-bottom: 1rem;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: var(--lava-solid);
+        }
+
+        button {
+            background: var(--lava);
+            color: white;
+            border: none;
+            padding: 0.8rem 2rem;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        button:hover { opacity: 0.9; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .results-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+        }
+
+        @media (max-width: 768px) {
+            .results-grid { grid-template-columns: 1fr; }
+        }
+
+        .psq-score {
+            font-size: 4rem;
+            font-weight: 800;
+            text-align: center;
+            margin: 1rem 0;
+        }
+
+        .csp-list {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+
+        .csp-item {
+            padding: 0.5rem;
+            border-radius: 4px;
+            text-align: center;
+            font-size: 0.8rem;
+            background: #000;
+            border: 1px solid var(--border);
+        }
+
+        .csp-item.active {
+            border-color: var(--green);
+            color: var(--green);
+        }
+
+        .flag-tag {
+            display: inline-block;
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--red);
+            padding: 0.2rem 0.6rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            margin-right: 0.5rem;
+            margin-top: 0.5rem;
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+
+        .skill-card {
+            background: #000;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            position: relative;
+        }
+
+        .skill-card h4 {
+            color: var(--blue);
+            margin-bottom: 0.5rem;
+        }
+
+        .skill-card pre {
+            font-size: 0.75rem;
+            color: var(--text-dim);
+            white-space: pre-wrap;
+            max-height: 100px;
+            overflow-y: auto;
+        }
+
+        .copy-btn {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            padding: 0.3rem 0.6rem;
+            font-size: 0.7rem;
+            background: var(--border);
+        }
+
+        .hidden { display: none; }
+        .loader { text-align: center; padding: 2rem; color: var(--text-dim); }
+        .error { color: var(--red); padding: 1rem; border: 1px solid var(--red); border-radius: 8px; margin-bottom: 1rem; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>SuperPromt</h1>
+            <p class="subtitle">CLI-конвейер оценки и улучшения задач по метрике PSQ</p>
+        </header>
+
+        <div class="card">
+            <textarea id="promptInput" placeholder="Введите вашу задачу здесь..."></textarea>
+            <button id="evalBtn">Оценить задачу</button>
+        </div>
+
+        <div id="loader" class="loader hidden">Анализируем промт и подбираем скиллы...</div>
+        <div id="error" class="error hidden"></div>
+
+        <div id="results" class="hidden">
+            <div class="results-grid">
+                <div class="card">
+                    <h3>PSQ Score</h3>
+                    <div id="psqValue" class="psq-score">0.00</div>
+                    <div id="cspList" class="csp-list"></div>
+                    <div id="flagsList" style="margin-top: 1.5rem;"></div>
+                </div>
+                <div class="card">
+                    <h3>Рекомендованные скиллы</h3>
+                    <div id="skillsList"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const el = (id) => document.getElementById(id);
+        
+        el('evalBtn').addEventListener('click', async () => {
+            const prompt = el('promptInput').value.trim();
+            if (!prompt) return;
+
+            el('loader').classList.remove('hidden');
+            el('results').classList.add('hidden');
+            el('error').classList.add('hidden');
+            el('evalBtn').disabled = true;
+
+            try {
+                const [psqRes, skillsRes] = await Promise.all([
+                    fetch('/api/psq', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ prompt })
+                    }).then(r => r.ok ? r.json() : r.json().then(e => { throw new Error(e.detail || 'PSQ Error') })),
+                    fetch(`/api/skills?task=${encodeURIComponent(prompt)}`).then(r => r.json())
+                ]);
+
+                renderPSQ(psqRes);
+                renderSkills(skillsRes);
+                el('results').classList.remove('hidden');
+            } catch (err) {
+                el('error').textContent = err.message;
+                el('error').classList.remove('hidden');
+            } finally {
+                el('loader').classList.add('hidden');
+                el('evalBtn').disabled = false;
+            }
+        });
+
+        function renderPSQ(data) {
+            const val = el('psqValue');
+            val.textContent = data.psq.toFixed(2);
+            
+            if (data.psq < 0.5) val.style.color = 'var(--red)';
+            else if (data.psq < 0.8) val.style.color = 'var(--yellow)';
+            else val.style.color = 'var(--green)';
+
+            el('cspList').innerHTML = data.c.map((val, i) => 
+                `<div class="csp-item ${val ? 'active' : ''}">c${i+1}</div>`
+            ).join('');
+
+            el('flagsList').innerHTML = data.flags.length ? 
+                '<strong>Флаги накрутки:</strong><br>' + 
+                data.flags.map(f => `<span class="flag-tag">${f.name}: ${f.count}</span>`).join('') :
+                '<span style="color: var(--text-dim)">Флаги накрутки не обнаружены</span>';
+        }
+
+        function renderSkills(data) {
+            el('skillsList').innerHTML = data.skills.map(s => `
+                <div class="skill-card">
+                    <h4>${s.name}</h4>
+                    <pre>${s.text.substring(0, 200)}${s.text.length > 200 ? '...' : ''}</pre>
+                    <button class="copy-btn" onclick="copyText(this, \`${s.text.replace(/`/g, '\\`')}\`)">Копировать</button>
+                </div>
+            `).join('');
+        }
+
+        async function copyText(btn, text) {
+            await navigator.clipboard.writeText(text);
+            const old = btn.textContent;
+            btn.textContent = 'Скопировано!';
+            setTimeout(() => btn.textContent = old, 2000);
+        }
+    </script>
+</body>
+</html>
