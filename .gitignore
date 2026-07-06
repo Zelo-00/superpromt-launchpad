@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Виртуальные окружения
+.venv/
+venv/
+env/
+
+# Секреты и локальная конфигурация
+.env
+*.local.env
+
+# Node / фронтенд-сборки
+node_modules/
+dist/
+build/
+
+# ОС и редакторы
+.DS_Store
+Thumbs.db

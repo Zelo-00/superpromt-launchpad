@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "superpromt": {
+      "command": "python3",
+      "args": ["./mcp/superpromt_mcp.py"],
+      "description": "SuperPromt: web/backend-скиллы + PSQ-оценка постановки внутри агента Kodik"
+    }
+  }
+}
