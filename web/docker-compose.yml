@@ -1,0 +1,18 @@
+# Поднять веб-приложение одной командой:
+#   cd web && docker compose up --build
+# Открыть: http://localhost:8000
+services:
+  backend:
+    build:
+      context: ..                       # корень репозитория (нужен superprompt_cli и skills)
+      dockerfile: web/backend/Dockerfile
+    image: superpromt-web:latest
+    ports:
+      - "8000:8000"
+    environment:
+      - DEBUG=false
+      # Глубокая оценка судьёй (опционально): укажите модель и ключ провайдера.
+      # Без ключа приложение работает по детерминированному pre-скринингу (короткие/накрученные промты).
+      # - JUDGE_MODEL=gpt-4o
+      # - OPENAI_API_KEY=sk-...
+    restart: unless-stopped
