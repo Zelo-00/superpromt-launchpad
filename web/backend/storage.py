@@ -24,23 +24,28 @@ class HistoryStorage:
                     psq REAL,
                     gaming REAL,
                     prescreen TEXT,
-                    mode TEXT
+                    mode TEXT,
+                    flags TEXT
                 )
             """)
+            try:
+                conn.execute("ALTER TABLE history ADD COLUMN flags TEXT")
+            except sqlite3.OperationalError:
+                pass
             conn.commit()
 
-    def add_entry(self, prompt: str, psq: float, gaming: float, prescreen: Optional[str], mode: str):
+    def add_entry(self, prompt: str, psq: float, gaming: float, prescreen: Optional[str], mode: str, flags: Optional[List[Dict[str, Any]]] = None):
         with self._get_connection() as conn:
             conn.execute(
-                "INSERT INTO history (prompt, psq, gaming, prescreen, mode) VALUES (?, ?, ?, ?, ?)",
-                (prompt, psq, gaming, prescreen, mode)
+                "INSERT INTO history (prompt, psq, gaming, prescreen, mode, flags) VALUES (?, ?, ?, ?, ?, ?)",
+                (prompt, psq, gaming, prescreen, mode, json.dumps(flags) if flags else None)
             )
             conn.commit()
 
     def get_history(self, limit: int = 10) -> List[Dict[str, Any]]:
         with self._get_connection() as conn:
             cursor = conn.execute(
-                "SELECT id, timestamp, prompt, psq, gaming, prescreen, mode FROM history ORDER BY id DESC LIMIT ?",
+                "SELECT id, timestamp, prompt, psq, gaming, prescreen, mode, flags FROM history ORDER BY id DESC LIMIT ?",
                 (limit,)
             )
             return [dict(row) for row in cursor.fetchall()]
@@ -48,7 +53,7 @@ class HistoryStorage:
     def get_entry(self, entry_id: int) -> Optional[Dict[str, Any]]:
         with self._get_connection() as conn:
             cursor = conn.execute(
-                "SELECT id, timestamp, prompt, psq, gaming, prescreen, mode FROM history WHERE id = ?",
+                "SELECT id, timestamp, prompt, psq, gaming, prescreen, mode, flags FROM history WHERE id = ?",
                 (entry_id,)
             )
             row = cursor.fetchone()
@@ -84,21 +89,17 @@ class HistoryStorage:
             cursor = conn.execute("SELECT timestamp, psq FROM history ORDER BY id DESC LIMIT 20")
             stats["recent_points"] = [{"timestamp": r["timestamp"], "psq": r["psq"]} for r in cursor.fetchall()][::-1]
 
-            # Распределение флагов (прескрин)
-            # Так как флаги хранятся в prescreen (вероятно как JSON строка или текст), 
-            # а в add_entry передается res["prescreen"], нам нужно понять формат.
-            # В main.py: res["flags"] = [{"name": f[0], "count": f[1]} for f in res["flags"]]
-            # Но в базу пишется res["prescreen"].
-            cursor = conn.execute("SELECT prescreen FROM history WHERE prescreen IS NOT NULL")
+            # Распределение флагов (из новой колонки flags)
+            cursor = conn.execute("SELECT flags FROM history WHERE flags IS NOT NULL")
             flags_dist = {}
             for r in cursor.fetchall():
                 try:
-                    # Пытаемся распарсить если это JSON, иначе считаем как строку
-                    data = json.loads(r["prescreen"])
-                    if isinstance(data, dict) and "flags" in data:
-                        for f in data["flags"]:
-                            name = f[0] if isinstance(f, (list, tuple)) else f.get("name")
-                            flags_dist[name] = flags_dist.get(name, 0) + 1
+                    data = json.loads(r["flags"])
+                    if isinstance(data, list):
+                        for f in data:
+                            name = f.get("name")
+                            if name:
+                                flags_dist[name] = flags_dist.get(name, 0) + 1
                 except:
                     pass
             stats["flags_distribution"] = flags_dist

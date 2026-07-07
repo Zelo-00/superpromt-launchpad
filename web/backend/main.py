@@ -199,8 +199,9 @@ async def calculate_psq(req: PSQRequest):
         res = psq.prescreen(req.prompt)
         if res:
             # Преобразуем флаги из кортежей в объекты
+            flags_raw = res["flags"]
             res["flags"] = [{"name": f[0], "count": f[1]} for f in res["flags"]]
-            storage.add_entry(req.prompt, res["psq"], res["gaming"], res["prescreen"], mode)
+            storage.add_entry(req.prompt, res["psq"], res["gaming"], res["prescreen"], mode, res["flags"])
             return res
 
         # 2. Если пре-скрининг не дал результата, нужен судья
@@ -208,7 +209,7 @@ async def calculate_psq(req: PSQRequest):
             res = psq.score(req.prompt, settings.judge_model)
             # Преобразуем флаги
             res["flags"] = [{"name": f[0], "count": f[1]} for f in res["flags"]]
-            storage.add_entry(req.prompt, res["psq"], res["gaming"], res.get("prescreen"), mode)
+            storage.add_entry(req.prompt, res["psq"], res["gaming"], res.get("prescreen"), mode, res["flags"])
             return res
         except Exception as e:
             # Любая ошибка судьи (нет ключа/сети, неизвестный или ненастроенный провайдер) →
