@@ -772,6 +772,8 @@
         <div class="tabs">
             <button class="tab-btn active" id="tabEval">Оценка</button>
             <button class="tab-btn" id="tabStudio">Студия</button>
+            <button class="tab-btn" id="tabCompare">Сравнение</button>
+            <div id="tabIndicator" style="position: absolute; bottom: -0.6rem; height: 2px; background: var(--lava); transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);"></div>
         </div>
 
         <div id="evalView">
@@ -805,6 +807,40 @@
                 </div>
                 <div id="repairText" class="repair-content"></div>
             </div>
+        </div>
+
+        <div id="compareView" class="hidden">
+            <span class="eyebrow">A/B Comparison</span>
+            <div id="compareVerdict" class="card hidden" style="text-align: center; border-color: var(--molten-core); background: rgba(255, 106, 36, 0.05);">
+                <h2 id="verdictText" style="color: var(--parchment); margin-bottom: 0.5rem;"></h2>
+                <div id="verdictDelta" style="font-family: ui-monospace, monospace; color: var(--ash); font-size: 1.2rem;"></div>
+            </div>
+            
+            <div class="compare-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+                <div class="card" id="cardA">
+                    <span class="eyebrow">Prompt A</span>
+                    <textarea id="promptA" style="height: 120px; margin-bottom: 1rem;" placeholder="Введите промт A..."></textarea>
+                    <div id="resultA" class="hidden">
+                        <div class="psq-gauge-container" id="gaugeA" style="position: relative; width: 160px; margin: 0 auto;"></div>
+                        <div class="csp-grid" id="cspA" style="grid-template-columns: repeat(4, 1fr); gap: 0.5rem; margin-top: 1rem;"></div>
+                        <div id="flagsA" style="margin-top: 1rem; display: flex; flex-wrap: wrap; justify-content: center;"></div>
+                    </div>
+                </div>
+                <div class="card" id="cardB">
+                    <span class="eyebrow">Prompt B</span>
+                    <textarea id="promptB" style="height: 120px; margin-bottom: 1rem;" placeholder="Введите промт B..."></textarea>
+                    <div id="resultB" class="hidden">
+                        <div class="psq-gauge-container" id="gaugeB" style="position: relative; width: 160px; margin: 0 auto;"></div>
+                        <div class="csp-grid" id="cspB" style="grid-template-columns: repeat(4, 1fr); gap: 0.5rem; margin-top: 1rem;"></div>
+                        <div id="flagsB" style="margin-top: 1rem; display: flex; flex-wrap: wrap; justify-content: center;"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <button id="compareBtn" class="btn-primary" style="margin: 0 auto; display: flex;">
+                <span class="spinner"></span>
+                <span class="btn-text">Сравнить промты</span>
+            </button>
         </div>
 
         <div id="studioView" class="hidden">
@@ -943,6 +979,122 @@
     <script src="/static/icons.js"></script>
     <script>
         const el = (id) => document.getElementById(id);
+
+        function updateTabIndicator() {
+            const activeTab = document.querySelector('.tab-btn.active');
+            const indicator = el('tabIndicator');
+            if (activeTab && indicator) {
+                indicator.style.width = `${activeTab.offsetWidth}px`;
+                indicator.style.left = `${activeTab.offsetLeft}px`;
+            }
+        }
+
+        // Tab switching
+        const views = ['evalView', 'studioView', 'compareView'];
+        const tabs = ['tabEval', 'tabStudio', 'tabCompare'];
+
+        tabs.forEach((tabId, idx) => {
+            el(tabId).addEventListener('click', () => {
+                tabs.forEach(t => el(t).classList.remove('active'));
+                el(tabId).classList.add('active');
+                views.forEach(v => el(v).classList.add('hidden'));
+                el(views[idx]).classList.remove('hidden');
+                updateTabIndicator();
+                
+                if (tabId === 'tabEval') el('results').classList.remove('hidden');
+                else el('results').classList.add('hidden');
+            });
+        });
+
+        window.addEventListener('resize', updateTabIndicator);
+        setTimeout(updateTabIndicator, 100);
+
+        async function callPsq(prompt) {
+            try {
+                const res = await fetch('/api/psq', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt })
+                });
+                if (res.status === 503) {
+                    el('banner503').classList.remove('hidden');
+                }
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                return await res.json();
+            } catch (err) {
+                console.error(err);
+                el('error').textContent = `Ошибка сети: ${err.message}`;
+                el('error').classList.remove('hidden');
+                return null;
+            }
+        }
+
+        function renderCsp(container, csp) {
+            container.innerHTML = '';
+            const labels = ['Role', 'Context', 'Task', 'Format', 'Example', 'Constraint', 'Few-shot', 'Chain'];
+            for (let i = 0; i < 8; i++) {
+                const active = csp && csp[i] === 1;
+                const tile = document.createElement('div');
+                tile.className = `csp-tile ${active ? 'active' : ''}`;
+                tile.innerHTML = `<span class="id">${i+1}</span><span class="label">${labels[i]}</span>`;
+                container.appendChild(tile);
+            }
+        }
+
+        function renderFlags(container, flags) {
+            container.innerHTML = '';
+            if (!flags) return;
+            flags.forEach(f => {
+                const tag = document.createElement('span');
+                tag.className = 'flag-tag';
+                tag.innerHTML = `${ICONS.triangleAlert({className:'icon'})} ${f}`;
+                container.appendChild(tag);
+            });
+        }
+
+        el('compareBtn').addEventListener('click', async () => {
+            const pA = el('promptA').value.trim();
+            const pB = el('promptB').value.trim();
+            if (!pA || !pB) return;
+
+            el('compareBtn').classList.add('loading');
+            el('compareBtn').disabled = true;
+            el('error').classList.add('hidden');
+            el('compareVerdict').classList.add('hidden');
+
+            const [resA, resB] = await Promise.all([callPsq(pA), callPsq(pB)]);
+            
+            el('compareBtn').classList.remove('loading');
+            el('compareBtn').disabled = false;
+
+            if (!resA || !resB) return;
+
+            const scoreA = (resA.psq || 0);
+            const scoreB = (resB.psq || 0);
+
+            el('resultA').classList.remove('hidden');
+            el('resultB').classList.remove('hidden');
+
+            renderGauge(el('gaugeA'), scoreA);
+            renderGauge(el('gaugeB'), scoreB);
+            renderCsp(el('cspA'), resA.csp);
+            renderCsp(el('cspB'), resB.csp);
+            renderFlags(el('flagsA'), resA.flags);
+            renderFlags(el('flagsB'), resB.flags);
+
+            el('cardA').style.borderColor = scoreA > scoreB ? 'var(--molten-core)' : 'var(--line)';
+            el('cardB').style.borderColor = scoreB > scoreA ? 'var(--molten-core)' : 'var(--line)';
+
+            el('compareVerdict').classList.remove('hidden');
+            const delta = Math.abs(scoreA - scoreB).toFixed(2);
+            if (Math.abs(scoreA - scoreB) < 0.01) {
+                el('verdictText').textContent = 'Паритет';
+                el('verdictDelta').textContent = `Δ 0.00`;
+            } else {
+                el('verdictText').textContent = scoreA > scoreB ? 'Промт A точнее' : 'Промт B точнее';
+                el('verdictDelta').textContent = `Δ ${delta}`;
+            }
+        });
 
         function renderGauge(containerEl, value) {
             const color = value < 0.5 ? 'var(--crit)' : (value < 0.8 ? 'var(--warn)' : 'var(--good)');
