@@ -58,3 +58,49 @@ class HistoryStorage:
         with self._get_connection() as conn:
             conn.execute("DELETE FROM history")
             conn.commit()
+
+    def get_stats(self) -> Dict[str, Any]:
+        with self._get_connection() as conn:
+            # Общая статистика
+            cursor = conn.execute("""
+                SELECT 
+                    COUNT(*) as total_count,
+                    AVG(psq) as avg_psq,
+                    SUM(CASE WHEN psq < 0.8 THEN 1 ELSE 0 END) * 1.0 / COUNT(*) as low_psq_ratio
+                FROM history
+            """)
+            row = cursor.fetchone()
+            stats = {
+                "total_count": row["total_count"] or 0,
+                "avg_psq": round(row["avg_psq"] or 0, 3),
+                "low_psq_ratio": round(row["low_psq_ratio"] or 0, 3)
+            }
+
+            # Распределение по режимам
+            cursor = conn.execute("SELECT mode, COUNT(*) as count FROM history GROUP BY mode")
+            stats["modes"] = {row["mode"]: row["count"] for row in cursor.fetchall()}
+
+            # Последние 20 оценок для графика
+            cursor = conn.execute("SELECT timestamp, psq FROM history ORDER BY id DESC LIMIT 20")
+            stats["recent_points"] = [{"timestamp": r["timestamp"], "psq": r["psq"]} for r in cursor.fetchall()][::-1]
+
+            # Распределение флагов (прескрин)
+            # Так как флаги хранятся в prescreen (вероятно как JSON строка или текст), 
+            # а в add_entry передается res["prescreen"], нам нужно понять формат.
+            # В main.py: res["flags"] = [{"name": f[0], "count": f[1]} for f in res["flags"]]
+            # Но в базу пишется res["prescreen"].
+            cursor = conn.execute("SELECT prescreen FROM history WHERE prescreen IS NOT NULL")
+            flags_dist = {}
+            for r in cursor.fetchall():
+                try:
+                    # Пытаемся распарсить если это JSON, иначе считаем как строку
+                    data = json.loads(r["prescreen"])
+                    if isinstance(data, dict) and "flags" in data:
+                        for f in data["flags"]:
+                            name = f[0] if isinstance(f, (list, tuple)) else f.get("name")
+                            flags_dist[name] = flags_dist.get(name, 0) + 1
+                except:
+                    pass
+            stats["flags_distribution"] = flags_dist
+
+            return stats

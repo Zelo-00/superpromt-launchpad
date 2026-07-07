@@ -61,3 +61,15 @@ def test_history_clear():
     assert client.delete("/api/history").status_code in (200, 204)
     entries = client.get("/api/history").json()
     assert entries == []
+
+def test_stats_structure():
+    # /api/stats возвращает агрегаты после оценки
+    client.delete("/api/history")
+    client.post("/api/psq", json={"prompt": "Сделай сайт для кофейни"})
+    stats = client.get("/api/stats")
+    assert stats.status_code == 200
+    data = stats.json()
+    assert data["total_count"] >= 1
+    assert 0.0 <= data["avg_psq"] <= 1.0
+    assert "modes" in data
+    assert "recent_points" in data

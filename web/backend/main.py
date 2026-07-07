@@ -135,6 +135,14 @@ class HistoryEntry(BaseModel):
     prescreen: Optional[str]
     mode: str
 
+class StatsResponse(BaseModel):
+    total_count: int
+    avg_psq: float
+    low_psq_ratio: float
+    modes: Dict[str, int]
+    recent_points: List[Dict[str, Any]]
+    flags_distribution: Dict[str, int]
+
 class RepairRequest(BaseModel):
     prompt: str = Field(..., min_length=1, max_length=MAX_PROMPT_LENGTH)
 
@@ -230,6 +238,10 @@ async def get_history_entry(entry_id: int):
     if not entry:
         raise HTTPException(status_code=404, detail="Entry not found")
     return entry
+
+@app.get("/api/stats", response_model=StatsResponse)
+async def get_stats():
+    return storage.get_stats()
 
 @app.delete("/api/history")
 async def clear_history():

@@ -441,6 +441,73 @@
         .collapsed .history-list {
             display: none;
         }
+
+        /* Stats Dashboard */
+        .stats-container {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            padding: 1rem 0;
+        }
+        .collapsed .stats-container {
+            display: none;
+        }
+        .stats-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1rem;
+        }
+        .stat-card {
+            background: #000;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1rem;
+            text-align: center;
+        }
+        .stat-card .label {
+            font-size: 0.75rem;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.25rem;
+        }
+        .stat-card .value {
+            font-size: 1.5rem;
+            font-weight: 800;
+            color: var(--lava-solid);
+        }
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+        }
+        .chart-box {
+            background: #000;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1rem;
+            min-height: 220px;
+            display: flex;
+            flex-direction: column;
+        }
+        .chart-box h4 {
+            font-size: 0.85rem;
+            color: var(--text-dim);
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+        .chart-box canvas {
+            flex: 1;
+            width: 100% !important;
+            height: 100% !important;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            * {
+                animation-duration: 0.01ms !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
     </style>
 </head>
 <body>
@@ -509,6 +576,42 @@
                 <div class="card">
                     <h3>Рекомендованные скиллы</h3>
                     <div id="skillsList"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="history-panel collapsed" id="statsPanel">
+            <div class="history-header" id="statsToggle">
+                <h3>📊 Аналитика <span class="chevron">▼</span></h3>
+            </div>
+            <div class="stats-container">
+                <div class="stats-cards">
+                    <div class="stat-card">
+                        <div class="label">Всего оценок</div>
+                        <div class="value" id="statTotal">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="label">Средний PSQ</div>
+                        <div class="value" id="statAvg">0.00</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="label">Ниже 0.8</div>
+                        <div class="value" id="statLow">0%</div>
+                    </div>
+                </div>
+                <div class="charts-grid">
+                    <div class="chart-box">
+                        <h4>Тренд PSQ</h4>
+                        <canvas id="chartPSQ"></canvas>
+                    </div>
+                    <div class="chart-box">
+                        <h4>Флаги накрутки</h4>
+                        <canvas id="chartFlags"></canvas>
+                    </div>
+                    <div class="chart-box">
+                        <h4>Режимы (Fast vs Deep)</h4>
+                        <canvas id="chartModes"></canvas>
+                    </div>
                 </div>
             </div>
         </div>
@@ -607,6 +710,150 @@
 
         loadHistory();
 
+        // Аналитика
+        async function loadStats() {
+            try {
+                const r = await fetch('/api/stats');
+                const data = await r.json();
+                
+                el('statTotal').textContent = data.total_count;
+                el('statAvg').textContent = data.avg_psq.toFixed(2);
+                el('statLow').textContent = (data.low_psq_ratio * 100).toFixed(0) + '%';
+
+                drawPSQChart(data.recent_points);
+                drawFlagsChart(data.flags_distribution);
+                drawModesChart(data.modes);
+            } catch (e) { console.error('Stats load error', e); }
+        }
+
+        function drawPSQChart(points) {
+            const canvas = el('chartPSQ');
+            const ctx = canvas.getContext('2d');
+            const w = canvas.width = canvas.offsetWidth * devicePixelRatio;
+            const h = canvas.height = canvas.offsetHeight * devicePixelRatio;
+            ctx.scale(devicePixelRatio, devicePixelRatio);
+            const dw = canvas.offsetWidth;
+            const dh = canvas.offsetHeight;
+
+            ctx.clearRect(0, 0, dw, dh);
+            if (points.length < 2) return;
+
+            const padding = 20;
+            const gW = dw - padding * 2;
+            const gH = dh - padding * 2;
+
+            ctx.beginPath();
+            ctx.strokeStyle = '#ff4d00';
+            ctx.lineWidth = 2;
+            ctx.lineJoin = 'round';
+
+            points.forEach((p, i) => {
+                const x = padding + (i / (points.length - 1)) * gW;
+                const y = padding + (1 - p.psq) * gH;
+                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                
+                // Точка
+                ctx.fillStyle = '#ff8700';
+                ctx.fillRect(x-2, y-2, 4, 4);
+            });
+            ctx.stroke();
+
+            // Градиент под графиком
+            const grad = ctx.createLinearGradient(0, padding, 0, dh);
+            grad.addColorStop(0, 'rgba(255, 77, 0, 0.2)');
+            grad.addColorStop(1, 'rgba(255, 77, 0, 0)');
+            ctx.lineTo(padding + gW, dh - padding);
+            ctx.lineTo(padding, dh - padding);
+            ctx.fillStyle = grad;
+            ctx.fill();
+        }
+
+        function drawFlagsChart(dist) {
+            const canvas = el('chartFlags');
+            const ctx = canvas.getContext('2d');
+            const dw = canvas.width = canvas.offsetWidth;
+            const dh = canvas.height = canvas.offsetHeight;
+            
+            const keys = Object.keys(dist);
+            if (!keys.length) return;
+
+            const max = Math.max(...Object.values(dist));
+            const padding = 30;
+            const barW = (dw - padding * 2) / keys.length - 10;
+
+            keys.forEach((key, i) => {
+                const val = dist[key];
+                const barH = (val / max) * (dh - padding * 2);
+                const x = padding + i * (barW + 10);
+                const y = dh - padding - barH;
+
+                const grad = ctx.createLinearGradient(0, y, 0, dh - padding);
+                grad.addColorStop(0, '#ff4d00');
+                grad.addColorStop(1, '#ff8700');
+                ctx.fillStyle = grad;
+                ctx.fillRect(x, y, barW, barH);
+
+                ctx.fillStyle = '#a1a1aa';
+                ctx.font = '10px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText(key.substring(0, 6), x + barW/2, dh - 10);
+                ctx.fillText(val, x + barW/2, y - 5);
+            });
+        }
+
+        function drawModesChart(modes) {
+            const canvas = el('chartModes');
+            const ctx = canvas.getContext('2d');
+            const dw = canvas.width = canvas.offsetWidth;
+            const dh = canvas.height = canvas.offsetHeight;
+            
+            const total = (modes.fast || 0) + (modes.deep || 0);
+            if (total === 0) return;
+
+            const centerX = dw / 2;
+            const centerY = dh / 2;
+            const radius = Math.min(dw, dh) / 3;
+
+            let startAngle = -Math.PI / 2;
+            
+            const drawSlice = (val, color, label) => {
+                const sliceAngle = (val / total) * 2 * Math.PI;
+                ctx.beginPath();
+                ctx.moveTo(centerX, centerY);
+                ctx.arc(centerX, centerY, radius, startAngle, startAngle + sliceAngle);
+                ctx.closePath();
+                ctx.fillStyle = color;
+                ctx.fill();
+
+                // Label
+                const midAngle = startAngle + sliceAngle / 2;
+                const lx = centerX + Math.cos(midAngle) * (radius + 20);
+                const ly = centerY + Math.sin(midAngle) * (radius + 20);
+                ctx.fillStyle = '#e4e4e7';
+                ctx.font = '12px sans-serif';
+                ctx.textAlign = 'center';
+                if (val > 0) ctx.fillText(`${label}: ${val}`, lx, ly);
+
+                startAngle += sliceAngle;
+            };
+
+            drawSlice(modes.fast || 0, '#f59e0b', 'Fast');
+            drawSlice(modes.deep || 0, '#10b981', 'Deep');
+
+            // Пончик
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius * 0.6, 0, 2 * Math.PI);
+            ctx.fillStyle = '#0a0a0b';
+            ctx.fill();
+        }
+
+        el('statsToggle').addEventListener('click', () => {
+            el('statsPanel').classList.toggle('collapsed');
+            if (!el('statsPanel').classList.contains('collapsed')) loadStats();
+        });
+
+        loadStats();
+
         // Примеры
         document.querySelectorAll('.example-btn').forEach(btn => {
             btn.addEventListener('click', () => {
@@ -656,6 +903,7 @@
                 renderSkills(skillsData);
                 el('results').classList.remove('hidden');
                 loadHistory();
+                loadStats();
             } catch (err) {
                 el('error').textContent = `Ошибка: ${err.message}`;
                 el('error').classList.remove('hidden');
