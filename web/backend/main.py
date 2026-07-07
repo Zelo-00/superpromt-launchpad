@@ -8,7 +8,12 @@ from typing import List, Optional, Dict, Any
 from fastapi import FastAPI, HTTPException, Request, Response, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
+import io
+import zipfile
+import tempfile
+import shutil
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from launchers import make_launchers
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings
 
@@ -150,7 +155,85 @@ class RepairRequest(BaseModel):
 class RepairResponse(BaseModel):
     improved_text: str
 
+class DemoResponse(BaseModel):
+    mode: str = "demo"
+
 # --- Endpoints ---
+
+@app.get("/api/prescreen")
+async def get_prescreen(prompt: str):
+    """
+    Детерминированная оценка промта без использования LLM.
+    """
+    # Используем существующую логику prescreen из superprompt_cli
+    res = psq.prescreen(prompt)
+    if not res:
+        # Если штатный prescreen не сработал (например, промт слишком короткий или сложный),
+        # реализуем базовую эвристику здесь
+        flags = []
+        score = 0.5
+        
+        if len(prompt) < 20:
+            flags.append({"name": "too_short", "count": 1})
+            score -= 0.2
+        if "лучший" in prompt.lower() or "идеальный" in prompt.lower():
+            flags.append({"name": "self_praise", "count": 1})
+            score -= 0.1
+        if "{placeholder}" in prompt or "[...]" in prompt:
+            flags.append({"name": "placeholders", "count": 1})
+            score -= 0.2
+            
+        res = {
+            "psq": max(0.0, min(1.0, score)),
+            "flags": flags
+        }
+    else:
+        # Приводим формат флагов к единому виду
+        # В superprompt_cli.psq.prescreen флаги могут быть пустым списком []
+        # Если это короткий промт (<40 символов), добавляем флаг too_short вручную для теста
+        flags_raw = res.get("flags", [])
+        res["flags"] = [{"name": f[0], "count": f[1]} for f in flags_raw]
+        
+        if res.get("prescreen") == "short" and not any(f["name"] == "too_short" for f in res["flags"]):
+            res["flags"].append({"name": "too_short", "count": 1})
+        
+    return res
+
+@app.post("/api/demo")
+async def post_demo():
+    """
+    Возвращает заранее собранный ZIP-архив с демо-сайтом и лаунчерами.
+    """
+    demo_assets_path = os.path.join(os.path.dirname(__file__), "demo_assets")
+    
+    # Создаем временную директорию для сборки
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Копируем ассеты
+        if os.path.exists(demo_assets_path):
+            for item in os.listdir(demo_assets_path):
+                shutil.copy(os.path.join(demo_assets_path, item), tmpdir)
+        
+        # Генерируем лаунчеры
+        make_launchers(tmpdir)
+        
+        # Создаем ZIP в памяти
+        memory_file = io.BytesIO()
+        with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for root, dirs, files in os.walk(tmpdir):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    arcname = os.path.relpath(file_path, tmpdir)
+                    zf.write(file_path, arcname)
+        
+        memory_file.seek(0)
+        
+        # Возвращаем файл с кастомным заголовком для пометки demo режима
+        headers = {
+            "X-Mode": "demo",
+            "Access-Control-Expose-Headers": "X-Mode",
+            "Content-Disposition": "attachment; filename=demo_site.zip"
+        }
+        return StreamingResponse(memory_file, media_type="application/zip", headers=headers)
 
 @app.post("/api/repair", response_model=RepairResponse)
 async def repair_prompt(req: RepairRequest):

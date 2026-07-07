@@ -84,3 +84,58 @@ def test_upload_file():
     assert data["files"][0]["name"] == "photo.png"
     assert data["files"][0]["content_type"] == "image/png"
     assert data["files"][0]["size"] > 0
+
+def test_make_launchers():
+    import tempfile
+    import shutil
+    from web.backend.launchers import make_launchers
+    
+    with tempfile.TemporaryDirectory() as tmpdir:
+        make_launchers(tmpdir)
+        files = os.listdir(tmpdir)
+        assert "start.bat" in files
+        assert "start.command" in files
+        assert "start.sh" in files
+        assert "README.md" in files
+        
+        # Проверка прав доступа (исполняемые файлы)
+        if sys.platform != "win32":
+            assert os.access(os.path.join(tmpdir, "start.sh"), os.X_OK)
+            assert os.access(os.path.join(tmpdir, "start.command"), os.X_OK)
+
+def test_api_demo():
+    response = client.post("/api/demo")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/zip"
+    assert response.headers["X-Mode"] == "demo"
+    
+    # Проверка содержимого ZIP
+    import io
+    import zipfile
+    with zipfile.ZipFile(io.BytesIO(response.content)) as zf:
+        names = zf.namelist()
+        assert "index.html" in names
+        assert "styles.css" in names
+        assert "start.bat" in names
+        assert "README.md" in names
+
+def test_api_prescreen():
+    # Тест на короткий промт
+    r1 = client.get("/api/prescreen?prompt=Hi")
+    assert r1.status_code == 200
+    data1 = r1.json()
+    assert data1["psq"] < 0.5
+    assert any(f["name"] == "too_short" for f in data1["flags"])
+    
+    # Тест на самохвал
+    r2 = client.get("/api/prescreen?prompt=Напиши самый лучший идеальный код в мире")
+    assert r2.status_code == 200
+    data2 = r2.json()
+    assert any(f["name"] == "self_praise" for f in data2["flags"])
+    
+    # Тест на плейсхолдеры
+    r3 = client.get("/api/prescreen?prompt=Сделай [предметная область] для меня")
+    assert r3.status_code == 200
+    data3 = r3.json()
+    assert any(f["name"] in ("placeholder", "placeholders") for f in data3["flags"])
+
