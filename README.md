@@ -93,6 +93,9 @@ docker compose up --build
 | `GET`  | `/api/status` | Статус LLM-провайдера (deep/fast) |
 | `POST` | `/api/psq` | Оценка постановки задачи по PSQ |
 | `GET`  | `/api/skills?task=…` | Топ релевантных web/backend-скиллов под задачу |
+| `GET`  | `/api/history?n=10` | Последние N записей истории |
+| `GET`  | `/api/history/{id}` | Детали одной записи |
+| `DELETE`| `/api/history` | Очистить всю историю |
 | `GET`  | `/` | Одностраничный фронтенд |
 
 **Пример — оценка постановки:**

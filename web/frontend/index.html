@@ -354,6 +354,93 @@
 
         .hidden { display: none !important; }
         .error { color: var(--red); padding: 1rem; border: 1px solid var(--red); border-radius: 12px; margin-bottom: 1.5rem; background: rgba(239, 68, 68, 0.05); }
+
+        /* History Panel */
+        .history-panel {
+            margin-top: 2rem;
+            border-top: 1px solid var(--border);
+            padding-top: 2rem;
+        }
+        .history-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            cursor: pointer;
+        }
+        .history-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+        .history-item {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 0.75rem 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .history-item:hover {
+            border-color: var(--lava-solid);
+            transform: translateX(4px);
+        }
+        .history-info {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+            overflow: hidden;
+        }
+        .history-prompt {
+            font-size: 0.9rem;
+            color: var(--text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 400px;
+        }
+        .history-meta {
+            font-size: 0.75rem;
+            color: var(--text-dim);
+        }
+        .history-score {
+            font-weight: 800;
+            font-size: 1.1rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 6px;
+            min-width: 50px;
+            text-align: center;
+        }
+        .score-low { color: var(--red); background: rgba(239, 68, 68, 0.1); }
+        .score-mid { color: var(--yellow); background: rgba(245, 158, 11, 0.1); }
+        .score-high { color: var(--green); background: rgba(16, 185, 129, 0.1); }
+        
+        .clear-history-btn {
+            background: transparent;
+            color: var(--red);
+            border: 1px solid var(--red);
+            padding: 0.3rem 0.6rem;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .clear-history-btn:hover {
+            background: var(--red);
+            color: white;
+        }
+        .chevron {
+            transition: transform 0.3s;
+        }
+        .collapsed .chevron {
+            transform: rotate(-90deg);
+        }
+        .collapsed .history-list {
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -425,6 +512,14 @@
                 </div>
             </div>
         </div>
+
+        <div class="history-panel" id="historyPanel">
+            <div class="history-header" id="historyToggle">
+                <h3>📜 История оценок <span class="chevron">▼</span></h3>
+                <button id="clearHistoryBtn" class="clear-history-btn">Очистить историю</button>
+            </div>
+            <div class="history-list" id="historyList"></div>
+        </div>
     </div>
 
     <script>
@@ -450,6 +545,67 @@
             }
         }
         checkStatus();
+
+        // История
+        async function loadHistory() {
+            try {
+                const r = await fetch('/api/history?n=10');
+                const data = await r.json();
+                const list = el('historyList');
+                
+                if (data.length === 0) {
+                    list.innerHTML = '<div style="color: var(--text-dim); text-align: center; padding: 1rem;">История пуста</div>';
+                    return;
+                }
+
+                list.innerHTML = data.map(item => {
+                    let scoreClass = 'score-high';
+                    if (item.psq < 0.5) scoreClass = 'score-low';
+                    else if (item.psq < 0.8) scoreClass = 'score-mid';
+
+                    const date = new Date(item.timestamp + 'Z').toLocaleString('ru-RU', { 
+                        hour: '2-digit', 
+                        minute: '2-digit', 
+                        day: '2-digit', 
+                        month: '2-digit' 
+                    });
+
+                    return `
+                        <div class="history-item" onclick="loadHistoryItem(${item.id})">
+                            <div class="history-info">
+                                <div class="history-prompt">${item.prompt}</div>
+                                <div class="history-meta">${date} • ${item.mode}</div>
+                            </div>
+                            <div class="history-score ${scoreClass}">${item.psq.toFixed(2)}</div>
+                        </div>
+                    `;
+                }).join('');
+            } catch (e) { console.error('History load error', e); }
+        }
+
+        async function loadHistoryItem(id) {
+            try {
+                const r = await fetch(`/api/history/${id}`);
+                const data = await r.json();
+                el('promptInput').value = data.prompt;
+                el('evalBtn').click();
+            } catch (e) { console.error(e); }
+        }
+
+        el('historyToggle').addEventListener('click', (e) => {
+            if (e.target.id === 'clearHistoryBtn') return;
+            el('historyPanel').classList.toggle('collapsed');
+        });
+
+        el('clearHistoryBtn').addEventListener('click', async () => {
+            if (!confirm('Очистить всю историю оценок?')) return;
+            try {
+                await fetch('/api/history', { method: 'DELETE' });
+                loadHistory();
+            } catch (e) { console.error(e); }
+        });
+
+        loadHistory();
 
         // Примеры
         document.querySelectorAll('.example-btn').forEach(btn => {
@@ -499,6 +655,7 @@
                 renderPSQ(psqData);
                 renderSkills(skillsData);
                 el('results').classList.remove('hidden');
+                loadHistory();
             } catch (err) {
                 el('error').textContent = `Ошибка: ${err.message}`;
                 el('error').classList.remove('hidden');

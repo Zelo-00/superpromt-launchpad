@@ -42,3 +42,22 @@ def test_psq_prescreen_gaming():
     assert data["prescreen"] == "watchdog"
     assert any(f["name"] == "self_praise" for f in data["flags"])
     assert any(f["name"] == "tautology" for f in data["flags"])
+
+def test_history_flow():
+    # Успешная оценка сохраняется в историю и доступна через API
+    client.delete("/api/history")
+    r = client.post("/api/psq", json={"prompt": "Сделай сайт для магазина"})
+    assert r.status_code == 200
+    hist = client.get("/api/history?limit=10")
+    assert hist.status_code == 200
+    entries = hist.json()
+    assert len(entries) >= 1
+    assert entries[0]["prompt"] == "Сделай сайт для магазина"
+    assert "psq" in entries[0]
+
+def test_history_clear():
+    # Очистка истории оставляет пустой список
+    client.post("/api/psq", json={"prompt": "Сделай код"})
+    assert client.delete("/api/history").status_code in (200, 204)
+    entries = client.get("/api/history").json()
+    assert entries == []

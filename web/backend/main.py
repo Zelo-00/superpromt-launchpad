@@ -11,19 +11,23 @@ from pydantic_settings import BaseSettings
 
 # Добавляем корень проекта в sys.path для импорта superprompt_cli
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))  # каталог бэкенда — для локальных модулей (storage)
 
 from superprompt_cli import psq, router, webskills
+from storage import HistoryStorage
 
 class Settings(BaseSettings):
     app_name: str = "SuperPromt API"
     debug: bool = False
     judge_model: str = "gpt-4o"  # Дефолтная модель для судьи
     repair_model: str = "gpt-4o"
+    db_path: str = "history.db"
     
     class Config:
         env_file = ".env"
 
 settings = Settings()
+storage = HistoryStorage(settings.db_path)
 app = FastAPI(title=settings.app_name)
 
 app.add_middleware(
@@ -65,6 +69,15 @@ class SkillsResponse(BaseModel):
     domain: str
     confidence: float
     skills: List[SkillItem]
+
+class HistoryEntry(BaseModel):
+    id: int
+    timestamp: str
+    prompt: str
+    psq: float
+    gaming: float
+    prescreen: Optional[str]
+    mode: str
 
 class RepairRequest(BaseModel):
     prompt: str = Field(..., min_length=1)
@@ -112,11 +125,16 @@ async def get_status():
 @app.post("/api/psq", response_model=PSQResponse)
 async def calculate_psq(req: PSQRequest):
     try:
+        # Проверяем режим (для истории)
+        has_llm = any(os.environ.get(k) for k in ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GOOGLE_API_KEY"])
+        mode = "deep" if has_llm else "fast"
+
         # 1. Детерминированный пре-скрининг (не требует LLM)
         res = psq.prescreen(req.prompt)
         if res:
             # Преобразуем флаги из кортежей в объекты
             res["flags"] = [{"name": f[0], "count": f[1]} for f in res["flags"]]
+            storage.add_entry(req.prompt, res["psq"], res["gaming"], res["prescreen"], mode)
             return res
 
         # 2. Если пре-скрининг не дал результата, нужен судья
@@ -124,6 +142,7 @@ async def calculate_psq(req: PSQRequest):
             res = psq.score(req.prompt, settings.judge_model)
             # Преобразуем флаги
             res["flags"] = [{"name": f[0], "count": f[1]} for f in res["flags"]]
+            storage.add_entry(req.prompt, res["psq"], res["gaming"], res.get("prescreen"), mode)
             return res
         except Exception as e:
             # Любая ошибка судьи (нет ключа/сети, неизвестный или ненастроенный провайдер) →
@@ -140,6 +159,24 @@ async def calculate_psq(req: PSQRequest):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/history", response_model=List[HistoryEntry])
+async def get_history(n: int = 10):
+    if n <= 0:
+        raise HTTPException(status_code=400, detail="N must be positive")
+    return storage.get_history(limit=n)
+
+@app.get("/api/history/{entry_id}", response_model=HistoryEntry)
+async def get_history_entry(entry_id: int):
+    entry = storage.get_entry(entry_id)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    return entry
+
+@app.delete("/api/history")
+async def clear_history():
+    storage.clear_history()
+    return {"status": "ok"}
 
 @app.get("/api/skills", response_model=SkillsResponse)
 async def get_skills(task: str):

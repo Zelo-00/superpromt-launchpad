@@ -13,6 +13,11 @@ env/
 .env
 *.local.env
 
+# Базы данных (runtime-хранилище истории)
+*.db
+*.sqlite
+*.sqlite3
+
 # Node / фронтенд-сборки
 node_modules/
 dist/
