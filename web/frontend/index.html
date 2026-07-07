@@ -23,6 +23,11 @@
             --lava: linear-gradient(135deg, #ff5312, #ff9a1f);
         }
 
+        .brand-logo { height: 44px; width: auto; }
+        .header-content { display: flex; align-items: center; justify-content: center; gap: 0.8rem; position: relative; }
+        .hero-forge { position: absolute; right: 0; top: 50%; transform: translateY(-50%); width: 180px; opacity: 0.45; pointer-events: none; }
+        @media (max-width: 720px) { .hero-forge { display: none; } }
+
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
             background-color: var(--void);
@@ -758,9 +763,15 @@
 <body>
     <div class="container">
         <header>
-            <span class="eyebrow">Evaluation Engine</span>
-            <h1>SuperPromt</h1>
-            <p class="subtitle">Интеллектуальный конвейер оценки промтов</p>
+            <div class="header-content">
+                <div id="brandLogoContainer"></div>
+                <div style="display: flex; flex-direction: column; align-items: flex-start;">
+                    <span class="eyebrow">Evaluation Engine</span>
+                    <h1 style="margin-bottom: 0;">SuperPromt</h1>
+                </div>
+                <div id="heroForgeContainer" class="hero-forge"></div>
+            </div>
+            <p class="subtitle" style="margin-top: 1rem;">Интеллектуальный конвейер оценки промтов</p>
             <div id="statusIndicator" class="status-badge">
                 <div class="status-dot"></div>
                 <span id="statusText">Загрузка...</span>
@@ -976,9 +987,21 @@
         </div>
     </div>
 
+    <script src="/static/brand.js"></script>
     <script src="/static/icons.js"></script>
     <script>
         const el = (id) => document.getElementById(id);
+
+        // Initialize Brand
+        if (typeof BRAND !== 'undefined') {
+            if (el('brandLogoContainer')) el('brandLogoContainer').innerHTML = `<div class="brand-logo">${BRAND.logo}</div>`;
+            if (el('heroForgeContainer')) el('heroForgeContainer').innerHTML = BRAND.heroForge;
+            
+            const faviconLink = document.createElement('link');
+            faviconLink.rel = 'icon';
+            faviconLink.href = `data:image/svg+xml,${encodeURIComponent(BRAND.favicon)}`;
+            document.head.appendChild(faviconLink);
+        }
 
         function updateTabIndicator() {
             const activeTab = document.querySelector('.tab-btn.active');
