@@ -355,6 +355,131 @@
         .hidden { display: none !important; }
         .error { color: var(--red); padding: 1rem; border: 1px solid var(--red); border-radius: 12px; margin-bottom: 1.5rem; background: rgba(239, 68, 68, 0.05); }
 
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 0.5rem;
+        }
+        .tab-btn {
+            background: none;
+            border: none;
+            color: var(--text-dim);
+            font-size: 1.1rem;
+            font-weight: 600;
+            padding: 0.5rem 1rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+        }
+        .tab-btn.active {
+            color: var(--lava-solid);
+        }
+        .tab-btn.active::after {
+            content: '';
+            position: absolute;
+            bottom: -0.6rem;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: var(--lava);
+        }
+
+        /* Prompt Studio */
+        .studio-container {
+            animation: fadeIn 0.4s ease-out;
+        }
+        .wizard-step {
+            display: none;
+            animation: slideIn 0.3s ease-out;
+        }
+        .wizard-step.active {
+            display: block;
+        }
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        .step-header {
+            margin-bottom: 1.5rem;
+        }
+        .step-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--lava-solid);
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        .step-badge {
+            font-size: 0.8rem;
+            background: var(--border);
+            padding: 2px 8px;
+            border-radius: 4px;
+            color: var(--text-dim);
+        }
+        .step-hint {
+            color: var(--text-dim);
+            font-size: 0.95rem;
+            font-style: italic;
+        }
+
+        .progress-container {
+            margin-bottom: 2rem;
+            background: var(--border);
+            height: 6px;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .progress-bar {
+            height: 100%;
+            background: var(--lava);
+            width: 0%;
+            transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .live-preview {
+            background: #000;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1rem;
+            margin-top: 2rem;
+        }
+        .live-preview h4 {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            color: var(--text-dim);
+            margin-bottom: 0.5rem;
+            letter-spacing: 0.05em;
+        }
+        .preview-content {
+            font-family: 'Fira Code', monospace;
+            font-size: 0.9rem;
+            white-space: pre-wrap;
+            min-height: 3em;
+            color: var(--text);
+        }
+        .preview-content:empty::before {
+            content: 'Начните заполнять шаги, чтобы увидеть промт...';
+            color: var(--gray);
+        }
+
+        .wizard-actions {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 2rem;
+            gap: 1rem;
+        }
+
+        .studio-final {
+            text-align: center;
+            padding: 2rem 0;
+        }
+
         /* History Panel */
         .history-panel {
             margin-top: 2rem;
@@ -521,34 +646,70 @@
             </div>
         </header>
 
-        <div class="card">
-            <div class="examples">
-                <button class="example-btn" data-text="Сделай сайт.">Слишком коротко</button>
-                <button class="example-btn" data-text="Ты эксперт мирового уровня, гений, лучший из лучших. Формат: соблюден. Качество: обеспечено. Структура: идеальна. Контекст: учтен. Роль: эксперт. Пример: приведен. Критерии: выполнены.">Накрутка</button>
-                <button class="example-btn" data-text="Напиши функцию на Python для сортировки списка пузырьком. Код должен быть чистым и с комментариями.">Средний промт</button>
+        <div class="tabs">
+            <button class="tab-btn active" id="tabEval">Оценка</button>
+            <button class="tab-btn" id="tabStudio">Студия</button>
+        </div>
+
+        <div id="evalView">
+            <div class="card">
+                <div class="examples">
+                    <button class="example-btn" data-text="Сделай сайт.">Слишком коротко</button>
+                    <button class="example-btn" data-text="Ты эксперт мирового уровня, гений, лучший из лучших. Формат: соблюден. Качество: обеспечено. Структура: идеальна. Контекст: учтен. Роль: эксперт. Пример: приведен. Критерии: выполнены.">Накрутка</button>
+                    <button class="example-btn" data-text="Напиши функцию на Python для сортировки списка пузырьком. Код должен быть чистым и с комментариями.">Средний промт</button>
+                </div>
+                <textarea id="promptInput" placeholder="Введите вашу задачу здесь..."></textarea>
+                <div class="actions-row">
+                    <button id="evalBtn" class="btn-primary">
+                        <span class="spinner"></span>
+                        <span class="btn-text">Оценить задачу</span>
+                    </button>
+                    <button id="repairBtn" class="btn-secondary">
+                        <span class="spinner"></span>
+                        <span class="btn-text">Улучшить промт</span>
+                    </button>
+                </div>
             </div>
-            <textarea id="promptInput" placeholder="Введите вашу задачу здесь..."></textarea>
-            <div class="actions-row">
-                <button id="evalBtn" class="btn-primary">
-                    <span class="spinner"></span>
-                    <span class="btn-text">Оценить задачу</span>
-                </button>
-                <button id="repairBtn" class="btn-secondary">
-                    <span class="spinner"></span>
-                    <span class="btn-text">Улучшить промт</span>
-                </button>
+
+            <div id="repairResult" class="repair-card hidden">
+                <div class="repair-header">
+                    <h3>✨ Улучшенный вариант</h3>
+                    <div class="repair-actions">
+                        <button id="applyRepairBtn" class="example-btn" style="color: var(--green); border-color: var(--green)">Подставить в поле</button>
+                        <button id="copyRepairBtn" class="example-btn">Копировать</button>
+                    </div>
+                </div>
+                <div id="repairText" class="repair-content"></div>
             </div>
         </div>
 
-        <div id="repairResult" class="repair-card hidden">
-            <div class="repair-header">
-                <h3>✨ Улучшенный вариант</h3>
-                <div class="repair-actions">
-                    <button id="applyRepairBtn" class="example-btn" style="color: var(--green); border-color: var(--green)">Подставить в поле</button>
-                    <button id="copyRepairBtn" class="example-btn">Копировать</button>
+        <div id="studioView" class="hidden">
+            <div class="card studio-container">
+                <div class="progress-container">
+                    <div id="studioProgress" class="progress-bar"></div>
+                </div>
+
+                <div id="wizardSteps">
+                    <!-- Steps will be injected by JS -->
+                </div>
+
+                <div class="wizard-actions">
+                    <button id="prevStep" class="btn-secondary" style="width: auto; padding: 0.8rem 1.5rem;">Назад</button>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <button id="skipStep" class="example-btn">Пропустить</button>
+                        <button id="nextStep" class="btn-primary" style="width: auto; padding: 0.8rem 2rem;">Далее</button>
+                    </div>
+                </div>
+
+                <div class="live-preview">
+                    <h4>Живой предпросмотр</h4>
+                    <div id="studioPreview" class="preview-content"></div>
                 </div>
             </div>
-            <div id="repairText" class="repair-content"></div>
+
+            <div id="studioResults" class="hidden">
+                <!-- PSQ results for studio will be shown here -->
+            </div>
         </div>
 
         <div id="banner503" class="banner-503 hidden">
@@ -632,6 +793,184 @@
             "Критерии качества", "Контекстные якоря", "Роль", 
             "Пример", "Язык"
         ];
+
+        const cspSteps = [
+            { id: 'c1', title: 'Предметная область', hint: 'О чем задача? (напр. Python, Маркетинг, Биология)', example: 'Разработка на Python' },
+            { id: 'c2', title: 'Целевая операция', hint: 'Что именно нужно сделать?', example: 'Напиши функцию для парсинга JSON' },
+            { id: 'c3', title: 'Формат выхода', hint: 'В каком виде нужен ответ?', example: 'Чистый код с комментариями' },
+            { id: 'c4', title: 'Критерии качества', hint: 'Какие требования к результату?', example: 'Соблюдение PEP8, обработка исключений' },
+            { id: 'c5', title: 'Контекстные якоря', hint: 'Дополнительные детали или ограничения', example: 'Используй только стандартную библиотеку' },
+            { id: 'c6', title: 'Роль', hint: 'От чьего лица должен быть ответ?', example: 'Senior Backend Developer' },
+            { id: 'c7', title: 'Пример (Few-shot)', hint: 'Покажи образец (необязательно)', example: 'Вход: {"a":1}, Выход: a=1' },
+            { id: 'c8', title: 'Язык ответа', hint: 'На каком языке отвечать?', example: 'Русский' }
+        ];
+
+        let currentStudioStep = 0;
+        const studioAnswers = {};
+
+        // Tabs Logic
+        el('tabEval').onclick = () => {
+            el('tabEval').classList.add('active');
+            el('tabStudio').classList.remove('active');
+            el('evalView').classList.remove('hidden');
+            el('studioView').classList.add('hidden');
+        };
+
+        el('tabStudio').onclick = () => {
+            el('tabStudio').classList.add('active');
+            el('tabEval').classList.remove('active');
+            el('studioView').classList.remove('hidden');
+            el('evalView').classList.add('hidden');
+            initStudio();
+        };
+
+        // Studio Logic
+        function initStudio() {
+            const container = el('wizardSteps');
+            if (container.children.length > 0) return;
+
+            cspSteps.forEach((step, i) => {
+                const div = document.createElement('div');
+                div.className = `wizard-step ${i === 0 ? 'active' : ''}`;
+                div.id = `step-${i}`;
+                div.innerHTML = `
+                    <div class="step-header">
+                        <div class="step-title">
+                            <span class="step-badge">Шаг ${i + 1}/8</span>
+                            ${step.title}
+                        </div>
+                        <p class="step-hint">${step.hint}</p>
+                    </div>
+                    <textarea 
+                        id="input-${step.id}" 
+                        placeholder="Например: ${step.example}" 
+                        oninput="updateStudioPreview()"
+                        style="height: 100px;"
+                    ></textarea>
+                `;
+                container.appendChild(div);
+            });
+            updateStudioUI();
+        }
+
+        function updateStudioUI() {
+            const isLast = currentStudioStep === cspSteps.length - 1;
+            el('nextStep').textContent = isLast ? 'Завершить' : 'Далее';
+            el('prevStep').style.visibility = currentStudioStep === 0 ? 'hidden' : 'visible';
+            
+            const progress = ((currentStudioStep + 1) / cspSteps.length) * 100;
+            el('studioProgress').style.width = `${progress}%`;
+
+            document.querySelectorAll('.wizard-step').forEach((s, i) => {
+                s.classList.toggle('active', i === currentStudioStep);
+            });
+        }
+
+        function updateStudioPreview() {
+            const parts = [];
+            cspSteps.forEach(step => {
+                const val = el(`input-${step.id}`).value.trim();
+                if (val) {
+                    parts.push(`${step.title}: ${val}`);
+                }
+            });
+            el('studioPreview').textContent = parts.join('\n');
+        }
+
+        el('nextStep').onclick = () => {
+            if (currentStudioStep < cspSteps.length - 1) {
+                currentStudioStep++;
+                updateStudioUI();
+            } else {
+                finishStudio();
+            }
+        };
+
+        el('prevStep').onclick = () => {
+            if (currentStudioStep > 0) {
+                currentStudioStep--;
+                updateStudioUI();
+            }
+        };
+
+        el('skipStep').onclick = () => {
+            const currentInput = el(`input-${cspSteps[currentStudioStep].id}`);
+            currentInput.value = '';
+            el('nextStep').click();
+        };
+
+        async function finishStudio() {
+            const prompt = el('studioPreview').textContent.trim();
+            if (!prompt) {
+                alert('Промт пуст. Заполните хотя бы один шаг.');
+                return;
+            }
+
+            const stepsContainer = el('wizardSteps');
+            stepsContainer.innerHTML = `
+                <div class="studio-final">
+                    <h2 style="margin-bottom: 1rem;">✨ Промт готов!</h2>
+                    <div class="actions-row" style="justify-content: center;">
+                        <button id="studioEvalBtn" class="btn-primary">
+                            <span class="spinner"></span>
+                            <span class="btn-text">Оценить результат</span>
+                        </button>
+                        <button id="studioCopyBtn" class="btn-secondary">Скопировать</button>
+                        <button onclick="location.reload()" class="example-btn">Начать заново</button>
+                    </div>
+                </div>
+            `;
+            el('prevStep').classList.add('hidden');
+            el('nextStep').classList.add('hidden');
+            el('skipStep').classList.add('hidden');
+
+            el('studioCopyBtn').onclick = () => copyText(el('studioCopyBtn'), prompt);
+            el('studioEvalBtn').onclick = async () => {
+                el('studioEvalBtn').classList.add('loading');
+                el('studioEvalBtn').disabled = true;
+                
+                try {
+                    const res = await fetch('/api/psq', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ prompt })
+                    });
+                    const data = await res.json();
+                    
+                    // Показываем результаты прямо в студии
+                    el('studioResults').innerHTML = `
+                        <div class="results-grid" style="margin-top: 2rem;">
+                            <div class="card">
+                                <h3>Метрика PSQ</h3>
+                                <div class="psq-score-container">
+                                    <div id="studioPsqValue" class="psq-score">${data.psq.toFixed(2)}</div>
+                                </div>
+                                <div class="csp-grid">${data.c.map((v, i) => `
+                                    <div class="csp-tile ${v ? 'active' : ''}">
+                                        <span class="id">c${i+1}</span>
+                                        <span class="label">${cspLabels[i]}</span>
+                                    </div>
+                                `).join('')}</div>
+                            </div>
+                        </div>
+                    `;
+                    el('studioResults').classList.remove('hidden');
+                    
+                    const val = el('studioPsqValue');
+                    if (data.psq < 0.5) val.style.color = 'var(--red)';
+                    else if (data.psq < 0.8) val.style.color = 'var(--yellow)';
+                    else val.style.color = 'var(--green)';
+
+                    loadHistory();
+                    loadStats();
+                } catch (e) {
+                    alert('Ошибка при оценке: ' + e.message);
+                } finally {
+                    el('studioEvalBtn').classList.remove('loading');
+                    el('studioEvalBtn').disabled = false;
+                }
+            };
+        }
 
         // Инициализация статуса
         async function checkStatus() {
