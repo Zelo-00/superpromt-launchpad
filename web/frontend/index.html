@@ -1076,6 +1076,17 @@
         }
         .brand-credit { letter-spacing: 0.04em; font-family: var(--font-display), sans-serif; }
         .brand-credit b { color: var(--molten-core); font-weight: 700; }
+        .social-link {
+            display: inline-grid; place-items: center;
+            width: 26px; height: 26px; margin-right: .15rem;
+            color: var(--ash); opacity: .85;
+            transition: color .2s, opacity .2s, transform .2s, filter .2s;
+        }
+        .social-link svg { width: 17px; height: 17px; }
+        .social-link:hover {
+            color: var(--molten-1); opacity: 1; transform: translateY(-1px);
+            filter: drop-shadow(0 2px 6px rgba(255, 83, 18, .55));
+        }
         .molten-dot {
             width: 4px;
             height: 4px;
@@ -1636,6 +1647,12 @@
     </div>
 
     <footer class="footer-watermark">
+        <a class="social-link" href="https://t.me/zerno_17" target="_blank" rel="noopener" aria-label="Telegram — @zerno_17" title="Telegram">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4 20-7z"/></svg>
+        </a>
+        <a class="social-link" href="https://vk.ru/zernoprod" target="_blank" rel="noopener" aria-label="VK — zernoprod" title="VK">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="18" height="18" rx="5"/><text x="12" y="15.4" text-anchor="middle" font-size="8.5" font-weight="700" fill="currentColor" stroke="none" font-family="inherit">VK</text></svg>
+        </a>
         <span class="brand-credit">@Zerno&nbsp;<b>2026</b></span>
         <div class="molten-dot"></div>
     </footer>
