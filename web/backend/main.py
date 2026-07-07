@@ -30,8 +30,9 @@ from storage import HistoryStorage
 class Settings(BaseSettings):
     app_name: str = "SuperPromt API"
     debug: bool = False
-    judge_model: str = "gpt-4o"  # Дефолтная модель для судьи
-    repair_model: str = "gpt-4o"
+    # Формат ядра: "провайдер/модель" (см. superprompt_cli/providers.py)
+    judge_model: str = "openai/gpt-4o"
+    repair_model: str = "openai/gpt-4o"
     db_path: str = "history.db"
     rate_limit_requests: int = 60
     rate_limit_window: int = 60
@@ -52,7 +53,9 @@ client_requests: Dict[str, deque] = defaultdict(deque)
 async def rate_limit_middleware(request: Request, call_next):
     # Ограничиваем только API
     if request.url.path.startswith("/api"):
-        client_ip = request.client.host
+        # Ключ лимита: CF-Connecting-IP ставится краем Cloudflare (клиент подменить не может),
+        # иначе — реальный peer. Клиентский X-Forwarded-For не использовать: тривиальный обход.
+        client_ip = request.headers.get("cf-connecting-ip") or request.client.host
         now = time.time()
         window_start = now - settings.rate_limit_window
         
@@ -255,8 +258,8 @@ async def repair_prompt(req: RepairRequest):
     except Exception as e:
         # Если psq.repair упал из-за отсутствия конфигурации провайдера внутри
         if "no provider" in str(e).lower() or "not configured" in str(e).lower():
-             raise HTTPException(status_code=503, detail=str(e))
-        raise HTTPException(status_code=500, detail=str(e))
+             raise HTTPException(status_code=503, detail="Улучшение недоступно: провайдер не настроен (BYOK).")
+        raise HTTPException(status_code=500, detail="Внутренняя ошибка при улучшении промта.")
 
 @app.get("/api/health")
 async def health():
@@ -301,15 +304,14 @@ async def calculate_psq(req: PSQRequest):
             # pre-скрининг при этом всегда работает без провайдера.
             raise HTTPException(
                 status_code=503,
-                detail="LLM-судья недоступен (провайдер не настроен, нет ключа или сети): "
-                       + str(e)[:200]
-                       + ". Детерминированный pre-скрининг работает без провайдера.",
+                detail="LLM-судья недоступен (провайдер не настроен, нет ключа или сети). "
+                       "Детерминированный pre-скрининг работает без провайдера.",
             )
 
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        raise HTTPException(status_code=500, detail="Внутренняя ошибка при оценке промта.")
 
 @app.get("/api/history", response_model=List[HistoryEntry])
 async def get_history(n: int = 10):
@@ -352,14 +354,17 @@ async def get_skills(task: str):
             "confidence": confidence,
             "skills": skills[:4]
         }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        raise HTTPException(status_code=500, detail="Внутренняя ошибка при подборе скиллов.")
 
 # --- Загрузка файлов (прикрепление к задаче) ---
 UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 MAX_FILE_SIZE = 10 * 1024 * 1024   # 10 МБ на файл
 MAX_FILES = 10
+
+ALLOWED_UPLOAD_EXT = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".txt", ".md",
+                      ".pdf", ".json", ".csv", ".py", ".js", ".html", ".docx"}
 
 @app.post("/api/upload")
 async def upload_files(files: List[UploadFile] = File(...)):
@@ -368,15 +373,24 @@ async def upload_files(files: List[UploadFile] = File(...)):
         raise HTTPException(status_code=422, detail="Слишком много файлов (максимум %d)" % MAX_FILES)
     saved = []
     for f in files:
-        data = await f.read()
-        if len(data) > MAX_FILE_SIZE:
-            raise HTTPException(status_code=422, detail="Файл '%s' превышает 10 МБ" % (f.filename or ""))
-        ext = os.path.splitext(f.filename or "")[1][:12]
+        ext = os.path.splitext(f.filename or "")[1].lower()[:12]
+        if ext not in ALLOWED_UPLOAD_EXT:
+            raise HTTPException(status_code=422, detail="Недопустимый тип файла '%s'" % ext)
+        # читаем чанками с ранней отсечкой — не держим >10 МБ в памяти
+        chunks, total = [], 0
+        while True:
+            chunk = await f.read(1024 * 1024)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > MAX_FILE_SIZE:
+                raise HTTPException(status_code=422, detail="Файл '%s' превышает 10 МБ" % (f.filename or ""))
+            chunks.append(chunk)
         fid = uuid.uuid4().hex
         with open(os.path.join(UPLOAD_DIR, fid + ext), "wb") as out:
-            out.write(data)
+            out.write(b"".join(chunks))
         saved.append({"id": fid, "name": os.path.basename(f.filename or (fid + ext)),
-                      "size": len(data), "content_type": f.content_type or "application/octet-stream"})
+                      "size": total, "content_type": f.content_type or "application/octet-stream"})
     return {"files": saved}
 
 # Монтируем статику в самом конце
@@ -389,4 +403,6 @@ if os.path.exists(frontend_path):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # proxy_headers=False: не доверять клиентскому X-Forwarded-For
+    # (иначе rate-limit обходится ротацией заголовка)
+    uvicorn.run(app, host="0.0.0.0", port=8000, proxy_headers=False)

@@ -64,7 +64,7 @@ mcp/              MCP-сервер: PSQ-гейт внутри самого Kodik
 
 Продукт публикуется на маркетплейсе Kodik в трёх формах: **Project** (веб-приложение), **Skill-пак** (10 курированных web/backend-скиллов) и **MCP-сервер** — PSQ-гейт и подбор скиллов доступны любому агенту Kodik как `mcp__superpromt__*` инструменты.
 
-- 🌐 Живое демо: http://193.39.208.35:8000
+- 🌐 Живое демо: https://html-performance-nails-delays.trycloudflare.com
 - 📦 Код ядра: https://github.com/Zelo-00/superpromt-launchpad
 - 🎬 Видео-демо: *(ссылка после публикации)*
 

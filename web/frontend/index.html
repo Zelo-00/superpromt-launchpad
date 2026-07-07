@@ -1739,6 +1739,9 @@
 
     <script>
         const el = (id) => document.getElementById(id);
+        // экранирование пользовательского ввода перед вставкой в innerHTML (анти-XSS)
+        const esc = (s) => String(s ?? '').replace(/[&<>"']/g,
+            ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 
         const I18N = {
             ru: {
@@ -1988,12 +1991,11 @@
 
         function renderCsp(container, csp) {
             container.innerHTML = '';
-            const labels = ['Role', 'Context', 'Task', 'Format', 'Example', 'Constraint', 'Few-shot', 'Chain'];
             for (let i = 0; i < 8; i++) {
                 const active = csp && csp[i] === 1;
                 const tile = document.createElement('div');
                 tile.className = `csp-tile ${active ? 'active' : ''}`;
-                tile.innerHTML = `<span class="id">${i+1}</span><span class="label">${labels[i]}</span>`;
+                tile.innerHTML = `<span class="id">c${i+1}</span><span class="label">${cspLabels[i]}</span>`;
                 container.appendChild(tile);
             }
         }
@@ -2325,7 +2327,7 @@
                         el('studioResults').innerHTML = `
                             <div class="banner-503" style="margin-top: 1.5rem;">
                                 ${ICONS.triangleAlert}
-                                <div>Не удалось оценить промт (${(data && data.detail) ? String(data.detail).slice(0,120) : res.status}).</div>
+                                <div>Не удалось оценить промт (${(data && data.detail) ? esc(String(data.detail).slice(0,120)) : res.status}).</div>
                             </div>`;
                         el('studioResults').classList.remove('hidden');
                         return;
@@ -2635,9 +2637,9 @@
                     });
 
                     return `
-                        <div class="history-item" onclick="loadHistoryItem(${item.id})">
+                        <div class="history-item" onclick="loadHistoryItem(${Number(item.id)})">
                             <div class="history-info">
-                                <div class="history-prompt">${item.prompt}</div>
+                                <div class="history-prompt">${esc(item.prompt)}</div>
                                 <div class="history-meta">${date} • ${item.mode}</div>
                             </div>
                             <div class="history-score ${scoreClass}">${item.psq.toFixed(2)}</div>
@@ -3068,7 +3070,7 @@
             var h = document.documentElement;
             var newTheme = h.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
             h.setAttribute('data-theme', newTheme);
-            localStorage.setItem('superpromt_theme', newTheme);
+            localStorage.setItem('spTheme', newTheme);
             applyThemeIcon();
         }
 

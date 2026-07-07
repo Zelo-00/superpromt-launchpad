@@ -1,7 +1,11 @@
 import os
 import sys
+import tempfile
 import pytest
 from fastapi.testclient import TestClient
+
+# Тестовая БД во временном каталоге — не трогаем боевую history.db
+os.environ.setdefault("DB_PATH", os.path.join(tempfile.gettempdir(), "superpromt_test_history.db"))
 
 # Добавляем путь для импорта
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
