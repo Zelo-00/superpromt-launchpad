@@ -935,8 +935,27 @@
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ prompt })
                     });
+                    // 503 — собранный промт качественный, нужна глубокая оценка судьёй (BYOK)
+                    if (res.status === 503) {
+                        el('studioResults').innerHTML = `
+                            <div class="banner-503" style="margin-top: 1.5rem;">
+                                <span>⚠️</span>
+                                <div><strong>Режим ограниченной оценки.</strong> Собранный промт качественный и требует глубокой оценки LLM-судьёй. Настройте провайдера (BYOK) для балла PSQ — либо просто скопируйте готовый промт.</div>
+                            </div>`;
+                        el('studioResults').classList.remove('hidden');
+                        return;
+                    }
                     const data = await res.json();
-                    
+                    if (!res.ok || typeof data.psq !== 'number') {
+                        el('studioResults').innerHTML = `
+                            <div class="banner-503" style="margin-top: 1.5rem;">
+                                <span>⚠️</span>
+                                <div>Не удалось оценить промт (${(data && data.detail) ? String(data.detail).slice(0,120) : res.status}).</div>
+                            </div>`;
+                        el('studioResults').classList.remove('hidden');
+                        return;
+                    }
+
                     // Показываем результаты прямо в студии
                     el('studioResults').innerHTML = `
                         <div class="results-grid" style="margin-top: 2rem;">
@@ -964,7 +983,11 @@
                     loadHistory();
                     loadStats();
                 } catch (e) {
-                    alert('Ошибка при оценке: ' + e.message);
+                    el('studioResults').innerHTML = `
+                        <div class="banner-503" style="margin-top: 1.5rem;">
+                            <span>⚠️</span><div>Ошибка сети при оценке. Попробуйте ещё раз.</div>
+                        </div>`;
+                    el('studioResults').classList.remove('hidden');
                 } finally {
                     el('studioEvalBtn').classList.remove('loading');
                     el('studioEvalBtn').disabled = false;
