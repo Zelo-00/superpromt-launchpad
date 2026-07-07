@@ -355,6 +355,69 @@
         .hidden { display: none !important; }
         .error { color: var(--red); padding: 1rem; border: 1px solid var(--red); border-radius: 12px; margin-bottom: 1.5rem; background: rgba(239, 68, 68, 0.05); }
 
+        /* Share Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(8px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 1rem;
+            animation: fadeIn 0.3s ease-out;
+        }
+        .modal-content {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            max-width: 800px;
+            width: 100%;
+            padding: 1.5rem;
+            position: relative;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+        }
+        .modal-close {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            background: var(--border);
+            border: none;
+            color: var(--text);
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+        .share-preview-container {
+            width: 100%;
+            margin-bottom: 1.5rem;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+            aspect-ratio: 1200 / 630;
+            background: #000;
+        }
+        .share-preview-container img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+        .share-actions {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
         /* Tabs */
         .tabs {
             display: flex;
@@ -733,6 +796,9 @@
                     <div id="cspGrid" class="csp-grid"></div>
 
                     <div id="flagsList" style="margin-top: 2rem;"></div>
+                    <button id="shareCardBtn" class="btn-secondary" style="margin-top: 1.5rem; width: 100%; background: rgba(255, 77, 0, 0.1); border: 1px solid rgba(255, 77, 0, 0.3); color: var(--lava-solid);">
+                        <span>🖼️</span> Поделиться карточкой
+                    </button>
                 </div>
                 <div class="card">
                     <h3>Рекомендованные скиллы</h3>
@@ -783,6 +849,25 @@
                 <button id="clearHistoryBtn" class="clear-history-btn">Очистить историю</button>
             </div>
             <div class="history-list" id="historyList"></div>
+        </div>
+    </div>
+
+    <!-- Share Modal -->
+    <div id="shareModal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <button class="modal-close" id="closeShareModal">&times;</button>
+            <h3 style="margin-bottom: 1rem; text-align: center;">Карточка результата</h3>
+            <div class="share-preview-container">
+                <img id="sharePreviewImg" src="" alt="Share Card Preview">
+            </div>
+            <div class="share-actions">
+                <button id="downloadPngBtn" class="btn-primary" style="padding: 0.8rem 1.5rem;">
+                    <span>💾</span> Скачать PNG
+                </button>
+                <button id="copyCardBtn" class="btn-secondary" style="padding: 0.8rem 1.5rem;">
+                    <span>📋</span> Копировать
+                </button>
+            </div>
         </div>
     </div>
 
@@ -994,6 +1079,116 @@
                 }
             };
         }
+
+        // Share Card Logic
+        class ShareCardGenerator {
+            constructor() {
+                this.canvas = document.createElement('canvas');
+                this.canvas.width = 1200;
+                this.canvas.height = 630;
+                this.ctx = this.canvas.getContext('2d');
+            }
+
+            async generate(data) {
+                const ctx = this.ctx;
+                const w = this.canvas.width;
+                const h = this.canvas.height;
+
+                // Background
+                ctx.fillStyle = '#0a0a0b';
+                ctx.fillRect(0, 0, w, h);
+
+                // Lava Gradient Overlay
+                const grad = ctx.createLinearGradient(0, 0, w, h);
+                grad.addColorStop(0, 'rgba(255, 77, 0, 0.15)');
+                grad.addColorStop(1, 'rgba(255, 135, 0, 0.05)');
+                ctx.fillStyle = grad;
+                ctx.fillRect(0, 0, w, h);
+
+                // Decorative elements
+                ctx.strokeStyle = 'rgba(255, 77, 0, 0.2)';
+                ctx.lineWidth = 1;
+                for(let i=0; i<w; i+=40) {
+                    ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, h); ctx.stroke();
+                }
+                for(let i=0; i<h; i+=40) {
+                    ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(w, i); ctx.stroke();
+                }
+
+                // Title
+                ctx.fillStyle = '#ff4d00';
+                ctx.font = 'bold 48px sans-serif';
+                ctx.textAlign = 'left';
+                ctx.fillText('SuperPromt', 60, 80);
+
+                // PSQ Score
+                const score = (data.psq || 0).toFixed(2);
+                let scoreColor = '#10b981';
+                let verdict = 'Отличная постановка';
+                if (data.psq < 0.5) {
+                    scoreColor = '#ef4444';
+                    verdict = 'Постановка требует доработки';
+                } else if (data.psq < 0.8) {
+                    scoreColor = '#f59e0b';
+                    verdict = 'Приемлемо';
+                }
+
+                ctx.textAlign = 'center';
+                ctx.fillStyle = scoreColor;
+                ctx.font = 'bold 220px sans-serif';
+                ctx.fillText(score, w/2, h/2 + 40);
+
+                ctx.fillStyle = '#e4e4e7';
+                ctx.font = '40px sans-serif';
+                ctx.fillText(verdict, w/2, h/2 + 120);
+
+                // Footer
+                ctx.fillStyle = '#a1a1aa';
+                ctx.font = '24px sans-serif';
+                ctx.textAlign = 'left';
+                ctx.fillText('Метрика PSQ (Prompt Structure Quality)', 60, h - 60);
+                
+                ctx.textAlign = 'right';
+                const dateStr = new Date().toLocaleDateString('ru-RU');
+                ctx.fillText(dateStr, w - 60, h - 60);
+
+                return this.canvas.toDataURL('image/png');
+            }
+        }
+
+        const cardGen = new ShareCardGenerator();
+
+        el('shareCardBtn').onclick = async () => {
+            if (!window.lastResult) return;
+            const dataUrl = await cardGen.generate(window.lastResult);
+            el('sharePreviewImg').src = dataUrl;
+            el('shareModal').classList.remove('hidden');
+        };
+
+        el('closeShareModal').onclick = () => el('shareModal').classList.add('hidden');
+        
+        el('downloadPngBtn').onclick = () => {
+            const link = document.createElement('a');
+            link.download = `superpromt-score-${(window.lastResult.psq || 0).toFixed(2)}.png`;
+            link.href = el('sharePreviewImg').src;
+            link.click();
+        };
+
+        el('copyCardBtn').onclick = async () => {
+            try {
+                const response = await fetch(el('sharePreviewImg').src);
+                const blob = await response.blob();
+                await navigator.clipboard.write([
+                    new ClipboardItem({ 'image/png': blob })
+                ]);
+                const originalText = el('copyCardBtn').innerHTML;
+                el('copyCardBtn').innerHTML = '<span>✅</span> Скопировано!';
+                setTimeout(() => el('copyCardBtn').innerHTML = originalText, 2000);
+            } catch (err) {
+                console.error('Clipboard error', err);
+                el('downloadPngBtn').click();
+            }
+        };
 
         // Инициализация статуса
         async function checkStatus() {
@@ -1330,6 +1525,9 @@
         function renderPSQ(data) {
             if (!data || typeof data.psq === 'undefined') return;
             
+            // Сохраняем данные для шеринга
+            window.lastResult = data;
+
             const val = el('psqValue');
             val.textContent = (data.psq || 0).toFixed(2);
             
