@@ -1275,6 +1275,11 @@
             .example-btn { padding: 8px 14px; }
             .attach-hint { display: none; }                   /* узко: подсказка не влезает рядом с кнопками */
             .actions-row .btn-secondary { width: 100%; }
+            /* Студия: ряд «Назад / Пропустить / Далее» не влезал — компактные кнопки + перенос */
+            .wizard-actions { flex-wrap: wrap; gap: .6rem; }
+            #prevStep { padding: .75rem 1rem !important; font-size: .9rem; }
+            #skipStep { padding: 8px 12px; font-size: .85rem; }
+            #nextStep { padding: .75rem 1.1rem !important; font-size: .9rem; }
         }
         @media (max-width: 380px) {
             h1 { font-size: clamp(1.4rem, 7vw, 1.8rem); }
@@ -1362,7 +1367,7 @@
                 <div class="examples">
                     <button class="example-btn" data-text="Сделай сайт." data-i18n="exShort">Слишком коротко</button>
                     <button class="example-btn" data-text="Ты эксперт мирового уровня, гений, лучший из лучших. Формат: соблюден. Качество: обеспечено. Структура: идеальна. Контекст: учтен. Роль: эксперт. Пример: приведен. Критерии: выполнены." data-i18n="exSpam">Накрутка</button>
-                    <button class="example-btn" data-text="Напиши функцию на Python для сортировки списка пузырьком. Код должен быть чистым и с комментариями." data-i18n="exMedium">Средний промт</button>
+                    <button class="example-btn" data-text="Напиши функцию сортировки списка на Python. Формат: код с комментариями и docstring. Требования: обработай пустой список и дубликаты, добавь пару тестов на pytest. Язык ответа: русский." data-i18n="exMedium">Средний промт</button>
                 </div>
                 <div class="ta-wrap">
                     <textarea id="promptInput" data-i18n-placeholder="promptPlaceholder" placeholder="Введите вашу задачу здесь..."></textarea>
