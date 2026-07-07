@@ -1,10 +1,11 @@
 import os
 import sys
 import time
+import uuid
 from collections import defaultdict, deque
 from typing import List, Optional, Dict, Any
 
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import FastAPI, HTTPException, Request, Response, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
@@ -270,6 +271,30 @@ async def get_skills(task: str):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# --- Загрузка файлов (прикрепление к задаче) ---
+UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+MAX_FILE_SIZE = 10 * 1024 * 1024   # 10 МБ на файл
+MAX_FILES = 10
+
+@app.post("/api/upload")
+async def upload_files(files: List[UploadFile] = File(...)):
+    """Приём прикреплённых файлов/фото. Сохраняет с безопасными uuid-именами, возвращает метаданные."""
+    if len(files) > MAX_FILES:
+        raise HTTPException(status_code=422, detail="Слишком много файлов (максимум %d)" % MAX_FILES)
+    saved = []
+    for f in files:
+        data = await f.read()
+        if len(data) > MAX_FILE_SIZE:
+            raise HTTPException(status_code=422, detail="Файл '%s' превышает 10 МБ" % (f.filename or ""))
+        ext = os.path.splitext(f.filename or "")[1][:12]
+        fid = uuid.uuid4().hex
+        with open(os.path.join(UPLOAD_DIR, fid + ext), "wb") as out:
+            out.write(data)
+        saved.append({"id": fid, "name": os.path.basename(f.filename or (fid + ext)),
+                      "size": len(data), "content_type": f.content_type or "application/octet-stream"})
+    return {"files": saved}
 
 # Монтируем статику в самом конце
 if os.path.exists(frontend_path):

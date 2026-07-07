@@ -73,3 +73,14 @@ def test_stats_structure():
     assert 0.0 <= data["avg_psq"] <= 1.0
     assert "modes" in data
     assert "recent_points" in data
+
+def test_upload_file():
+    # /api/upload принимает файл и возвращает метаданные
+    files = {"files": ("photo.png", b"\x89PNG\r\n\x1a\nxxxxxxxx", "image/png")}
+    r = client.post("/api/upload", files=files)
+    assert r.status_code == 200
+    data = r.json()
+    assert len(data["files"]) == 1
+    assert data["files"][0]["name"] == "photo.png"
+    assert data["files"][0]["content_type"] == "image/png"
+    assert data["files"][0]["size"] > 0

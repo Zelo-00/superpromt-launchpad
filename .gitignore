@@ -26,3 +26,6 @@ build/
 # ОС и редакторы
 .DS_Store
 Thumbs.db
+
+# Загруженные файлы (runtime)
+web/backend/uploads/
