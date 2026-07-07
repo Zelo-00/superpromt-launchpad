@@ -5,7 +5,30 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SuperPromt | PSQ Evaluation</title>
     <style>
+        @font-face {
+            font-family: 'SpaceGrotesk';
+            src: url('/static/fonts/space-grotesk.ttf');
+            font-display: swap;
+        }
+        @font-face {
+            font-family: 'Sora';
+            src: url('/static/fonts/sora.ttf');
+            font-display: swap;
+        }
+        @font-face {
+            font-family: 'Unbounded';
+            src: url('/static/fonts/unbounded.ttf');
+            font-display: swap;
+        }
+        @font-face {
+            font-family: 'Manrope';
+            src: url('/static/fonts/manrope.ttf');
+            font-display: swap;
+        }
+
         :root {
+            --font-display: 'SpaceGrotesk', sans-serif;
+            --font-body: 'Manrope', sans-serif;
             --void: #08080a;
             --surface: #101014;
             --surface-2: #16161c;
@@ -35,11 +58,17 @@
         body {
             background-color: var(--void);
             color: var(--parchment);
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-family: var(--font-body);
+            margin: 0;
+            padding: 0;
             line-height: 1.6;
-            padding: 2rem 1rem;
-            min-height: 100vh;
+            overflow-x: hidden;
         }
+
+        h1, h2, h3, .subtitle, .eyebrow, .tab-btn, .wordmark {
+            font-family: var(--font-display);
+        }
+
 
         .container {
             max-width: 1000px;
@@ -810,7 +839,34 @@
                 transition-duration: 0.01ms !important;
             }
         }
+        .chip-btn {
+            background: var(--surface-2);
+            border: 1px solid var(--line);
+            color: var(--ash);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            cursor: pointer;
+            font-family: var(--font-body);
+            transition: all 0.2s;
+        }
+        .chip-btn:hover {
+            border-color: var(--steel);
+            color: var(--parchment);
+        }
     </style>
+    <script>
+        function updateFont(font) {
+            document.documentElement.style.setProperty('--font-display', `'${font}', sans-serif`);
+            localStorage.setItem('spFont', font);
+        }
+        (function() {
+            const savedFont = localStorage.getItem('spFont');
+            if (savedFont) {
+                document.documentElement.style.setProperty('--font-display', `'${savedFont}', sans-serif`);
+            }
+        })();
+    </script>
 </head>
 <body>
     <div class="lang-switcher">
@@ -825,6 +881,11 @@
                 <div style="display: flex; flex-direction: column; align-items: flex-start;">
                     <span class="eyebrow">Evaluation Engine</span>
                     <h1 style="margin-bottom: 0;">SuperPromt</h1>
+                    <div class="font-switcher" style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+                        <button onclick="updateFont('SpaceGrotesk')" class="chip-btn">Grotesk</button>
+                        <button onclick="updateFont('Sora')" class="chip-btn">Sora</button>
+                        <button onclick="updateFont('Unbounded')" class="chip-btn">Unbounded</button>
+                    </div>
                 </div>
                 <div id="heroForgeContainer" class="hero-forge"></div>
             </div>
