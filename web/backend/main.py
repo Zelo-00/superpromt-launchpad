@@ -1,19 +1,24 @@
 import os
 import sys
+import time
+from collections import defaultdict, deque
 from typing import List, Optional, Dict, Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings
 
 # Добавляем корень проекта в sys.path для импорта superprompt_cli
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))  # каталог бэкенда — для локальных модулей (storage)
+root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+sys.path.insert(0, root_path)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # каталог бэкенда — для локальных модулей (storage)
 
-from superprompt_cli import psq, router, webskills
+import superprompt_cli.psq as psq
+import superprompt_cli.router as router
+import superprompt_cli.webskills as webskills
 from storage import HistoryStorage
 
 class Settings(BaseSettings):
@@ -22,7 +27,10 @@ class Settings(BaseSettings):
     judge_model: str = "gpt-4o"  # Дефолтная модель для судьи
     repair_model: str = "gpt-4o"
     db_path: str = "history.db"
-    
+    rate_limit_requests: int = 60
+    rate_limit_window: int = 60
+    allowed_origins: str = "http://localhost:8000,http://127.0.0.1:8000"
+
     class Config:
         env_file = ".env"
 
@@ -30,10 +38,56 @@ settings = Settings()
 storage = HistoryStorage(settings.db_path)
 app = FastAPI(title=settings.app_name)
 
+# --- Rate Limiting ---
+# Простая реализация скользящего окна на словаре IP -> deque меток времени
+client_requests: Dict[str, deque] = defaultdict(deque)
+
+@app.middleware("http")
+async def rate_limit_middleware(request: Request, call_next):
+    # Ограничиваем только API
+    if request.url.path.startswith("/api"):
+        client_ip = request.client.host
+        now = time.time()
+        window_start = now - settings.rate_limit_window
+        
+        # Очищаем старые метки
+        while client_requests[client_ip] and client_requests[client_ip][0] < window_start:
+            client_requests[client_ip].popleft()
+            
+        if len(client_requests[client_ip]) >= settings.rate_limit_requests:
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Too many requests. Please try again later."}
+            )
+        
+        client_requests[client_ip].append(now)
+        
+    return await call_next(request)
+
+# --- Security Headers ---
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    # CSP: разрешаем инлайновые скрипты/стили для совместимости с фронтом
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data:;"
+    )
+    return response
+
+# --- CORS ---
+origins = [o.strip() for o in settings.allowed_origins.split(",")]
+allow_all = "*" in origins
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=origins,
+    allow_credentials=not allow_all,  # НЕ отдаем credentials при wildcard
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -45,8 +99,10 @@ frontend_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../fron
 
 # --- Models ---
 
+MAX_PROMPT_LENGTH = 5000
+
 class PSQRequest(BaseModel):
-    prompt: str = Field(..., min_length=1, description="Сырой текст задачи")
+    prompt: str = Field(..., min_length=1, max_length=MAX_PROMPT_LENGTH, description="Сырой текст задачи")
 
 class FlagItem(BaseModel):
     name: str
@@ -80,7 +136,7 @@ class HistoryEntry(BaseModel):
     mode: str
 
 class RepairRequest(BaseModel):
-    prompt: str = Field(..., min_length=1)
+    prompt: str = Field(..., min_length=1, max_length=MAX_PROMPT_LENGTH)
 
 class RepairResponse(BaseModel):
     improved_text: str
@@ -89,6 +145,8 @@ class RepairResponse(BaseModel):
 
 @app.post("/api/repair", response_model=RepairResponse)
 async def repair_prompt(req: RepairRequest):
+    if len(req.prompt) > MAX_PROMPT_LENGTH:
+        raise HTTPException(status_code=422, detail="Prompt too long")
     try:
         # Проверяем наличие ключа для repair
         has_llm = any(os.environ.get(k) for k in ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GOOGLE_API_KEY"])
