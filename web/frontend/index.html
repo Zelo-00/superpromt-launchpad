@@ -142,34 +142,27 @@
             border-radius: 16px;
             padding: 1.5rem;
             margin-bottom: 2rem;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            box-shadow: 0 10px 40px -20px #000;
+            position: relative;
+            overflow: hidden;
         }
 
-        .examples {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.5rem;
-            margin-bottom: 1rem;
-        }
-        .example-btn {
-            background: var(--line);
-            color: var(--ash);
-            border: 1px solid transparent;
-            padding: 0.4rem 0.8rem;
-            border-radius: 8px;
-            font-size: 0.85rem;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        .example-btn:hover {
-            border-color: var(--molten-1);
-            color: var(--parchment);
+        .input-container-glass {
+            background: rgba(16, 16, 20, 0.4);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(36, 36, 44, 0.5);
+            box-shadow: 
+                0 20px 50px rgba(0, 0, 0, 0.4),
+                inset 0 0 20px rgba(255, 255, 255, 0.02);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         textarea {
             width: 100%;
             height: 160px;
-            background: #000;
+            background: rgba(8, 8, 10, 0.5);
+            backdrop-filter: blur(4px);
             border: 1px solid var(--line);
             border-radius: 12px;
             color: var(--parchment);
@@ -178,12 +171,25 @@
             font-size: 1rem;
             resize: vertical;
             margin-bottom: 1.2rem;
-            transition: border-color 0.2s;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.3);
         }
 
         textarea:focus {
             outline: none;
-            border-color: var(--molten-1);
+            border-color: var(--molten-core);
+            background: rgba(8, 8, 10, 0.7);
+            box-shadow: 
+                inset 0 2px 10px rgba(0, 0, 0, 0.5),
+                0 0 15px rgba(255, 106, 36, 0.15);
+            transform: translateY(-1px);
+        }
+
+        .input-container-glass:focus-within {
+            border-color: rgba(255, 106, 36, 0.4);
+            box-shadow: 
+                0 25px 60px rgba(0, 0, 0, 0.5),
+                inset 0 0 30px rgba(255, 106, 36, 0.05);
         }
 
         .btn-primary {
@@ -239,14 +245,62 @@
         .psq-score-container {
             text-align: center;
             padding: 1rem 0;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
         }
         .psq-score {
             font-size: 5rem;
             font-weight: 900;
             line-height: 1;
-            margin-bottom: 0.5rem;
+            margin-top: -1.5rem;
             font-family: ui-monospace, "SF Mono", monospace;
             font-variant-numeric: tabular-nums;
+            color: var(--parchment);
+            text-shadow: 0 0 20px rgba(255, 255, 255, 0.1);
+            z-index: 2;
+        }
+
+        .psq-gauge-svg {
+            width: 280px;
+            height: auto;
+            filter: drop-shadow(0 0 10px rgba(0,0,0,0.5));
+        }
+
+        .psq-gauge-bg {
+            fill: none;
+            stroke: var(--line-soft);
+            stroke-width: 4;
+            stroke-linecap: round;
+        }
+
+        .psq-gauge-ticks {
+            fill: none;
+            stroke: var(--line);
+            stroke-width: 2;
+            stroke-dasharray: 1 3.5;
+        }
+
+        .psq-gauge-fill {
+            fill: none;
+            stroke-width: 6;
+            stroke-linecap: round;
+            transition: stroke-dashoffset 0.9s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .psq-gauge-glow {
+            fill: none;
+            stroke-width: 12;
+            stroke-linecap: round;
+            opacity: 0.3;
+            filter: blur(8px);
+        }
+
+        .psq-gauge-indicator {
+            fill: var(--parchment);
+            filter: drop-shadow(0 0 5px var(--molten-core));
         }
 
         .csp-grid {
@@ -981,7 +1035,7 @@
 
         <div id="evalView">
             <span class="eyebrow" data-i18n="inputPrompt">Input Prompt</span>
-            <div class="card">
+            <div class="card input-container-glass">
                 <div class="examples">
                     <button class="example-btn" data-text="Сделай сайт." data-i18n="exShort">Слишком коротко</button>
                     <button class="example-btn" data-text="Ты эксперт мирового уровня, гений, лучший из лучших. Формат: соблюден. Качество: обеспечено. Структура: идеальна. Контекст: учтен. Роль: эксперт. Пример: приведен. Критерии: выполнены." data-i18n="exSpam">Накрутка</button>
@@ -1477,36 +1531,76 @@
             const circumference = Math.PI * radius;
             const offset = circumference - (value * circumference);
             
+            // SVG setup with ticks and glow
             containerEl.innerHTML = `
-                <svg class="psq-gauge-svg" viewBox="0 0 100 55">
+                <svg class="psq-gauge-svg" viewBox="0 0 100 60">
+                    <defs>
+                        <linearGradient id="gaugeGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                            <stop offset="0%" stop-color="var(--crit)" />
+                            <stop offset="50%" stop-color="var(--warn)" />
+                            <stop offset="100%" stop-color="var(--good)" />
+                        </linearGradient>
+                        <filter id="glow">
+                            <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+                            <feMerge>
+                                <feMergeNode in="coloredBlur"/>
+                                <feMergeNode in="SourceGraphic"/>
+                            </feMerge>
+                        </filter>
+                    </defs>
+                    <!-- Background track -->
                     <path class="psq-gauge-bg" d="M 10 50 A 40 40 0 0 1 90 50" />
+                    <!-- Ticks -->
+                    <path class="psq-gauge-ticks" d="M 10 50 A 40 40 0 0 1 90 50" />
+                    <!-- Glow layer -->
+                    <path class="psq-gauge-glow" d="M 10 50 A 40 40 0 0 1 90 50" 
+                        style="stroke: ${color}; stroke-dasharray: ${circumference}; stroke-dashoffset: ${circumference};" />
+                    <!-- Active fill -->
                     <path class="psq-gauge-fill" d="M 10 50 A 40 40 0 0 1 90 50" 
                         style="stroke: ${color}; stroke-dasharray: ${circumference}; stroke-dashoffset: ${circumference};" />
+                    <!-- Indicator dot -->
+                    <circle class="psq-gauge-indicator" r="2" cx="10" cy="50" style="opacity: 0;" />
                 </svg>
                 <div class="psq-score">0.00</div>
             `;
 
             const fill = containerEl.querySelector('.psq-gauge-fill');
+            const glow = containerEl.querySelector('.psq-gauge-glow');
+            const indicator = containerEl.querySelector('.psq-gauge-indicator');
             const scoreEl = containerEl.querySelector('.psq-score');
             
-            // Trigger animation
-            requestAnimationFrame(() => {
-                fill.style.strokeDashoffset = offset;
-            });
-
-            // Count up
-            let start = 0;
             const duration = 900;
             const startTime = performance.now();
+            const isReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
             function update(now) {
                 const elapsed = now - startTime;
-                const progress = Math.min(elapsed / duration, 1);
+                const progress = isReducedMotion ? 1 : Math.min(elapsed / duration, 1);
                 const easeProgress = 1 - Math.pow(1 - progress, 3); // easeOutCubic
-                const current = easeProgress * value;
-                scoreEl.textContent = current.toFixed(2);
-                if (progress < 1) requestAnimationFrame(update);
+                
+                const currentVal = easeProgress * value;
+                const currentOffset = circumference - (currentVal * circumference);
+                
+                // Update paths
+                fill.style.strokeDashoffset = currentOffset;
+                glow.style.strokeDashoffset = currentOffset;
+                
+                // Update indicator position
+                const angle = Math.PI + (currentVal * Math.PI);
+                const cx = 50 + radius * Math.cos(angle);
+                const cy = 50 + radius * Math.sin(angle);
+                indicator.setAttribute('cx', cx);
+                indicator.setAttribute('cy', cy);
+                indicator.style.opacity = currentVal > 0 ? 1 : 0;
+                
+                // Update score text
+                scoreEl.textContent = currentVal.toFixed(2);
+
+                if (progress < 1) {
+                    requestAnimationFrame(update);
+                }
             }
+
             requestAnimationFrame(update);
         }
 
