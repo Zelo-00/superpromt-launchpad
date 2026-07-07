@@ -1239,6 +1239,48 @@
         .wd-cta .btn-primary{margin:0 auto}
         .wd-skip{margin-top:.8rem;background:none;border:0;color:var(--ash);font-family:var(--font);font-size:.8rem;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
         .wd-skip:hover{color:var(--parchment)}
+
+        /* ===== мобильная оптимизация (Android / iPhone) ===== */
+        @media (max-width: 640px) {
+            body { padding-left: 1rem; padding-right: 1rem; }
+            .topbar { padding: .7rem 0; gap: .5rem; }
+            .wm { font-size: 1.02rem; }
+            .tools { gap: .45rem; }
+            .icon-btn { width: 40px; height: 40px; }         /* touch-таргеты ≥40px */
+            .menu-btn { padding: .5rem .7rem; }
+            .back-btn { margin-left: .5rem; padding: .5rem .85rem; }
+            header { margin-bottom: 1.8rem; }
+            h1 { font-size: clamp(1.55rem, 7.4vw, 2.15rem); letter-spacing: -.015em; }
+            .subtitle { font-size: .95rem; line-height: 1.5; }
+            .eyebrow { font-size: .66rem; }
+            /* 16px на полях ввода — iOS Safari не автозумит при фокусе */
+            textarea, .key-input, input { font-size: 16px !important; }
+            .ta-wrap textarea { padding-right: 78px; min-height: 100px; }
+            .live-gauge { width: 64px; top: 4px; right: 6px; }
+            .live-gauge svg { width: 58px; height: 37px; }
+            .live-gauge .lv { font-size: .78rem; }
+            .csp-grid { grid-template-columns: repeat(4, 1fr) !important; gap: .5rem; margin-top: 1.4rem; }
+            .csp-tile { border-radius: 9px; border-width: 1px; }
+            .csp-tile .id { font-size: .92rem; }
+            .settings-dropdown { position: fixed; left: 1rem; right: 1rem; top: 72px; width: auto; }
+            .psq-gauge-svg { width: 200px; }
+            .psq-score { font-size: 2.5rem; margin-top: -.8rem; }
+            .results-grid { gap: 1rem; }
+            .card { border-radius: 14px; }
+            .wd-card { padding: 1.4rem 1.05rem; }
+            .wd-ask { padding-right: 82px; }
+            .wd-row { font-size: .8rem; }
+            .modal-content { width: 92vw; }
+            .drawer { width: 296px; }
+            .example-btn { padding: 8px 14px; }
+            .attach-hint { display: none; }                   /* узко: подсказка не влезает рядом с кнопками */
+            .actions-row .btn-secondary { width: 100%; }
+        }
+        @media (max-width: 380px) {
+            h1 { font-size: clamp(1.4rem, 7vw, 1.8rem); }
+            .menu-btn span { display: none; }                 /* только иконка-бургер */
+            .csp-tile .id { font-size: .85rem; }
+        }
 </style>
     <script>
         function updateFont(font) {
@@ -1907,7 +1949,10 @@
                     body: JSON.stringify({ prompt })
                 });
                 if (res.status === 503) {
+                    // без ключа глубокая оценка недоступна — честный демо-фолбэк
+                    // на детерминированную клиентскую эвристику (помечаем demo)
                     el('banner503').classList.remove('hidden');
+                    return { psq: calcLivePSQ(prompt), c: null, flags: [], demo: true };
                 }
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 return await res.json();
@@ -1937,7 +1982,8 @@
             flags.forEach(f => {
                 const tag = document.createElement('span');
                 tag.className = 'flag-tag';
-                tag.innerHTML = `${ICONS.triangleAlert({className:'icon'})} ${f}`;
+                const label = typeof f === 'object' ? `${f.name}: ${f.count}` : f;
+                tag.innerHTML = `${ICONS.triangleAlert} ${label}`;
                 container.appendChild(tag);
             });
         }
@@ -1967,8 +2013,8 @@
 
             renderGauge(el('gaugeA'), scoreA);
             renderGauge(el('gaugeB'), scoreB);
-            renderCsp(el('cspA'), resA.csp);
-            renderCsp(el('cspB'), resB.csp);
+            renderCsp(el('cspA'), resA.c);
+            renderCsp(el('cspB'), resB.c);
             renderFlags(el('flagsA'), resA.flags);
             renderFlags(el('flagsB'), resB.flags);
 
@@ -1977,11 +2023,15 @@
 
             el('compareVerdict').classList.remove('hidden');
             const delta = Math.abs(scoreA - scoreB).toFixed(2);
+            const demoNote = (resA.demo || resB.demo)
+                ? (currentLang === 'ru' ? ' · демо-оценка (без ключа)' : ' · demo estimate (no key)') : '';
             if (Math.abs(scoreA - scoreB) < 0.01) {
-                el('verdictText').textContent = 'Паритет';
+                el('verdictText').textContent = (currentLang === 'ru' ? 'Паритет' : 'Parity') + demoNote;
                 el('verdictDelta').textContent = `Δ 0.00`;
             } else {
-                el('verdictText').textContent = scoreA > scoreB ? 'Промт A точнее' : 'Промт B точнее';
+                el('verdictText').textContent = (scoreA > scoreB
+                    ? (currentLang === 'ru' ? 'Промт A точнее' : 'Prompt A is stronger')
+                    : (currentLang === 'ru' ? 'Промт B точнее' : 'Prompt B is stronger')) + demoNote;
                 el('verdictDelta').textContent = `Δ ${delta}`;
             }
         });
