@@ -8,21 +8,25 @@
         @font-face {
             font-family: 'SpaceGrotesk';
             src: url('/static/fonts/space-grotesk.ttf');
+            font-weight: 100 900;
             font-display: swap;
         }
         @font-face {
             font-family: 'Sora';
             src: url('/static/fonts/sora.ttf');
+            font-weight: 100 900;
             font-display: swap;
         }
         @font-face {
             font-family: 'Unbounded';
             src: url('/static/fonts/unbounded.ttf');
+            font-weight: 100 900;
             font-display: swap;
         }
         @font-face {
             font-family: 'Manrope';
             src: url('/static/fonts/manrope.ttf');
+            font-weight: 100 900;
             font-display: swap;
         }
 
@@ -32,7 +36,10 @@
             --ask-bg: linear-gradient(180deg, #181410, #120f0c); --field: #0c0a08;
             --molten-1: #ff9d4d; --molten-core: #ff5312; --molten-deep: #cf3907;
             --steel: #4a5a66; --good: #4ad07a; --amber: #ffb14d; --low: #ff5a3c;
-            --font: "SF Pro Display", "Segoe UI", system-ui, -apple-system, sans-serif;
+            --font: 'Manrope', 'Segoe UI', system-ui, sans-serif;
+            --font-display: 'SpaceGrotesk', 'Manrope', system-ui, sans-serif;
+            --font-body: 'Manrope', system-ui, sans-serif;
+            --lava: linear-gradient(135deg, var(--molten-1), var(--molten-core) 60%, var(--molten-deep));
             --mono: ui-monospace, "SF Mono", Menlo, monospace;
             --serif: Georgia, "Times New Roman", serif;
             --void: var(--bg1);
@@ -57,9 +64,10 @@
         .nav-btn:hover { color: var(--text); }
         .nav-btn.active { color: var(--text); }
         .nav-btn.active::after { content: ""; position: absolute; left: .7rem; right: .7rem; bottom: 0; height: 2px; border-radius: 2px; background: linear-gradient(90deg, var(--molten-1), var(--molten-core)); }
-        .wm { font-weight: 800; font-size: 1.15rem; letter-spacing: -.01em; text-transform: uppercase;
-            background: linear-gradient(180deg, #ff9d4d, #ff5312 58%, #cf3907); -webkit-background-clip: text; background-clip: text;
-            -webkit-text-fill-color: transparent; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .4)); cursor: pointer; }
+        .wm { font-family: 'Unbounded', var(--font-display); font-weight: 800; font-size: 1.2rem; letter-spacing: -.01em; text-transform: uppercase;
+            background: linear-gradient(180deg, #ffb066, #ff5312 58%, #cf3907); -webkit-background-clip: text; background-clip: text;
+            -webkit-text-fill-color: transparent; filter: drop-shadow(0 2px 12px rgba(255, 83, 18, .4)); cursor: pointer; transition: filter .3s; }
+        .wm:hover { filter: drop-shadow(0 2px 18px rgba(255, 83, 18, .7)); }
         .tools { display: flex; align-items: center; gap: .55rem; }
         .lang { display: flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
         .lang button { background: transparent; border: 0; color: var(--muted); font-family: var(--font); font-size: .82rem; font-weight: 600; padding: .35rem .6rem; cursor: pointer; transition: .15s; }
@@ -98,7 +106,10 @@
         @media (max-width: 720px) { .hero-forge { display: none; } }
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
+        button, input, textarea, select { font-family: inherit; }
         body {
+            background: radial-gradient(65% 45% at 50% -2%, var(--glow), transparent 68%), var(--void);
+            background-attachment: fixed;
             background-color: var(--void);
             color: var(--parchment);
             font-family: var(--font-body);
@@ -1170,17 +1181,25 @@
         .attach-chip .rm:hover { color: var(--crit); }
         .attach-hint { font-size: 0.72rem; color: var(--ash); margin-top: 0.6rem; opacity: 0.85; }
     
-        .menu-btn{display:inline-flex;align-items:center;gap:.4rem;background:transparent;border:1px solid var(--line);border-radius:9px;color:var(--ash);font-family:inherit;font-size:.9rem;font-weight:600;padding:.35rem .7rem;cursor:pointer;transition:.15s}
-        .menu-btn:hover{color:var(--parchment);border-color:var(--molten-core)}
-        .back-btn{display:inline-flex;align-items:center;gap:.4rem;background:transparent;border:1px solid var(--line);border-radius:9px;color:var(--parchment);font-family:inherit;font-size:.88rem;font-weight:600;padding:.35rem .7rem;cursor:pointer;margin-left:1rem;transition:.15s}
-        .back-btn:hover{border-color:var(--molten-core);color:var(--molten-core)}
-        .drawer-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.55);opacity:0;visibility:hidden;transition:.25s;z-index:40}
+        .menu-btn{display:inline-flex;align-items:center;gap:.45rem;background:transparent;border:1px solid var(--line);border-radius:10px;color:var(--ash);font-family:var(--font);font-size:.9rem;font-weight:600;padding:.42rem .8rem;cursor:pointer;transition:.22s cubic-bezier(.4,0,.2,1)}
+        .menu-btn:hover{color:var(--parchment);border-color:var(--molten-core);box-shadow:0 0 0 1px var(--molten-core),0 6px 20px -6px rgba(255,83,18,.55);transform:translateY(-1px)}
+        .menu-btn svg{transition:.2s} .menu-btn:hover svg{color:var(--molten-1)}
+        .back-btn{display:inline-flex;align-items:center;gap:.45rem;background:transparent;border:1px solid var(--line);border-radius:999px;color:var(--parchment);font-family:var(--font);font-size:.88rem;font-weight:700;padding:.42rem .95rem;cursor:pointer;margin-left:1.1rem;transition:.24s cubic-bezier(.4,0,.2,1)}
+        .back-btn:hover{border-color:transparent;color:#180d05;background:linear-gradient(135deg,var(--molten-1),var(--molten-core));box-shadow:0 8px 24px -6px rgba(255,83,18,.7)}
+        .back-btn svg{transition:transform .24s} .back-btn:hover svg{transform:translateX(-3px)}
+        .drawer-backdrop{position:fixed;inset:0;background:rgba(8,6,4,.6);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);opacity:0;visibility:hidden;transition:.3s;z-index:40}
         .drawer-backdrop.open{opacity:1;visibility:visible}
-        .drawer{position:fixed;top:0;right:0;height:100%;width:300px;max-width:85vw;background:var(--surface,#141210);border-left:1px solid var(--line);transform:translateX(100%);transition:transform .28s cubic-bezier(.4,0,.2,1);z-index:41;padding:1.6rem 1.1rem;display:flex;flex-direction:column;gap:.25rem;box-shadow:-20px 0 50px rgba(0,0,0,.4)}
+        .drawer{position:fixed;top:0;right:0;height:100%;width:320px;max-width:86vw;background:linear-gradient(180deg,var(--card),var(--void));border-left:1px solid var(--molten-deep);transform:translateX(105%);transition:transform .34s cubic-bezier(.16,1,.3,1);z-index:41;padding:2rem 1.2rem;display:flex;flex-direction:column;gap:.3rem;box-shadow:-30px 0 70px rgba(0,0,0,.5)}
+        .drawer::before{content:"";position:absolute;top:0;left:0;width:2px;height:100%;background:linear-gradient(180deg,var(--molten-1),var(--molten-core),transparent);opacity:.85}
         .drawer.open{transform:translateX(0)}
-        .drawer-head{font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;color:var(--ash);font-weight:700;margin-bottom:.9rem}
-        .drawer-item{text-align:left;background:transparent;border:0;border-radius:10px;color:var(--parchment);font-family:inherit;font-size:.98rem;font-weight:600;padding:.75rem .8rem;cursor:pointer;transition:.15s}
-        .drawer-item:hover{background:rgba(255,83,18,.09);color:var(--molten-1)}
+        .drawer-head{font-family:var(--font-display);font-size:.72rem;letter-spacing:.18em;text-transform:uppercase;color:var(--molten-core);font-weight:700;margin-bottom:1.1rem;padding-left:.3rem}
+        .drawer-item{position:relative;text-align:left;background:transparent;border:0;border-radius:12px;color:var(--parchment);font-family:var(--font);font-size:1rem;font-weight:600;padding:.85rem 1rem;cursor:pointer;transition:.24s cubic-bezier(.4,0,.2,1);overflow:hidden}
+        .drawer-item::before{content:"";position:absolute;left:0;top:50%;transform:translateY(-50%);width:0;height:58%;border-radius:2px;background:linear-gradient(180deg,var(--molten-1),var(--molten-core));transition:.24s}
+        .drawer-item:hover{background:rgba(255,83,18,.1);color:var(--molten-1);padding-left:1.35rem;box-shadow:inset 0 0 0 1px rgba(255,83,18,.18)}
+        .drawer-item:hover::before{width:3px}
+        .btn-primary{box-shadow:0 10px 28px -8px rgba(255,83,18,.55)!important;transition:transform .18s cubic-bezier(.34,1.4,.6,1),box-shadow .22s,filter .22s!important}
+        .btn-primary:hover{transform:translateY(-2px);box-shadow:0 16px 40px -8px rgba(255,83,18,.78)!important;filter:brightness(1.07)}
+        .icon-btn:hover{color:var(--molten-1)!important;border-color:var(--molten-core)!important;box-shadow:0 5px 16px -5px rgba(255,83,18,.5)}
 </style>
     <script>
         function updateFont(font) {
@@ -1246,7 +1265,6 @@
         <div class="drawer-backdrop" id="drawerBackdrop" onclick="closeDrawer()"></div>
         <aside class="drawer" id="drawer">
             <div class="drawer-head" data-i18n="sections">Разделы</div>
-            <button class="drawer-item" onclick="openSection('studio')" data-i18n="nav_studio">Студия</button>
             <button class="drawer-item" onclick="openSection('compare')" data-i18n="nav_compare">Сравнение</button>
             <button class="drawer-item" onclick="openSection('analytics')" data-i18n="nav_analytics">Аналитика</button>
             <button class="drawer-item" onclick="openSection('history')" data-i18n="nav_history">История</button>
