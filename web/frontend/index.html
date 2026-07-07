@@ -6,24 +6,27 @@
     <title>SuperPromt | PSQ Evaluation</title>
     <style>
         :root {
-            --bg: #0a0a0b;
-            --card-bg: #141417;
-            --lava: linear-gradient(135deg, #ff4d00, #ff8700);
-            --lava-solid: #ff4d00;
-            --blue: #0070f3;
-            --text: #e4e4e7;
-            --text-dim: #a1a1aa;
-            --border: #27272a;
-            --red: #ef4444;
-            --yellow: #f59e0b;
-            --green: #10b981;
-            --gray: #3f3f46;
+            --void: #08080a;
+            --surface: #101014;
+            --surface-2: #16161c;
+            --line: #24242c;
+            --line-soft: #1c1c22;
+            --molten-1: #ff5312;
+            --molten-2: #ff9a1f;
+            --molten-core: #ff6a24;
+            --steel: #6f9bff;
+            --ash: #8b8b97;
+            --parchment: #ece6dc;
+            --crit: #e5484d;
+            --warn: #f5a623;
+            --good: #46c48a;
+            --lava: linear-gradient(135deg, #ff5312, #ff9a1f);
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
-            background-color: var(--bg);
-            color: var(--text);
+            background-color: var(--void);
+            color: var(--parchment);
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             line-height: 1.6;
             padding: 2rem 1rem;
@@ -40,17 +43,42 @@
             margin-bottom: 3rem;
         }
 
+        h1, h2, h3, h4, h5, h6 {
+            font-weight: 800;
+            letter-spacing: -0.03em;
+        }
+
         h1 {
             font-size: clamp(2rem, 8vw, 3.5rem);
-            font-weight: 800;
             background: var(--lava);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             margin-bottom: 0.5rem;
         }
 
+        .eyebrow {
+            text-transform: uppercase;
+            letter-spacing: 0.22em;
+            font-size: 0.72rem;
+            color: var(--ash);
+            margin-bottom: .5rem;
+            display: block;
+        }
+
+        .section-divider {
+            height: 12px;
+            margin: 3rem 0;
+            background: repeating-linear-gradient(
+                90deg,
+                var(--line),
+                var(--line) 2px,
+                transparent 2px,
+                transparent 6px
+            );
+        }
+
         .subtitle {
-            color: var(--text-dim);
+            color: var(--ash);
             font-size: 1.1rem;
         }
 
@@ -63,17 +91,17 @@
             font-size: 0.8rem;
             font-weight: 500;
             margin-top: 1rem;
-            background: var(--border);
+            background: var(--line);
         }
         .status-dot { width: 8px; height: 8px; border-radius: 50%; }
-        .status-deep { color: var(--green); }
-        .status-deep .status-dot { background: var(--green); box-shadow: 0 0 8px var(--green); }
-        .status-fast { color: var(--yellow); }
-        .status-fast .status-dot { background: var(--yellow); }
+        .status-deep { color: var(--good); }
+        .status-deep .status-dot { background: var(--good); box-shadow: 0 0 8px var(--good); }
+        .status-fast { color: var(--warn); }
+        .status-fast .status-dot { background: var(--warn); }
 
         .card {
-            background: var(--card-bg);
-            border: 1px solid var(--border);
+            background: var(--surface);
+            border: 1px solid var(--line);
             border-radius: 16px;
             padding: 1.5rem;
             margin-bottom: 2rem;
@@ -87,8 +115,8 @@
             margin-bottom: 1rem;
         }
         .example-btn {
-            background: var(--border);
-            color: var(--text-dim);
+            background: var(--line);
+            color: var(--ash);
             border: 1px solid transparent;
             padding: 0.4rem 0.8rem;
             border-radius: 8px;
@@ -97,17 +125,17 @@
             transition: all 0.2s;
         }
         .example-btn:hover {
-            border-color: var(--lava-solid);
-            color: var(--text);
+            border-color: var(--molten-1);
+            color: var(--parchment);
         }
 
         textarea {
             width: 100%;
             height: 160px;
             background: #000;
-            border: 1px solid var(--border);
+            border: 1px solid var(--line);
             border-radius: 12px;
-            color: var(--text);
+            color: var(--parchment);
             padding: 1.2rem;
             font-family: inherit;
             font-size: 1rem;
@@ -118,7 +146,7 @@
 
         textarea:focus {
             outline: none;
-            border-color: var(--lava-solid);
+            border-color: var(--molten-1);
         }
 
         .btn-primary {
@@ -180,6 +208,8 @@
             font-weight: 900;
             line-height: 1;
             margin-bottom: 0.5rem;
+            font-family: ui-monospace, "SF Mono", monospace;
+            font-variant-numeric: tabular-nums;
         }
 
         .csp-grid {
@@ -195,7 +225,7 @@
         .csp-tile {
             aspect-ratio: 1;
             background: #000;
-            border: 2px solid var(--gray);
+            border: 2px solid var(--line-soft);
             border-radius: 12px;
             display: flex;
             flex-direction: column;
@@ -206,24 +236,24 @@
             cursor: help;
         }
         .csp-tile.active {
-            border-color: var(--green);
-            background: rgba(16, 185, 129, 0.05);
-            box-shadow: 0 0 15px rgba(16, 185, 129, 0.1);
+            border-color: var(--good);
+            background: rgba(70, 196, 138, 0.05);
+            box-shadow: 0 0 15px rgba(70, 196, 138, 0.1);
         }
         .csp-tile .id {
             font-size: 1.2rem;
             font-weight: 800;
-            color: var(--gray);
+            color: var(--line-soft);
         }
-        .csp-tile.active .id { color: var(--green); }
+        .csp-tile.active .id { color: var(--good); }
         
         .csp-tile .label {
             position: absolute;
             bottom: -30px;
             left: 50%;
             transform: translateX(-50%);
-            background: var(--text);
-            color: var(--bg);
+            background: var(--parchment);
+            color: var(--void);
             padding: 4px 8px;
             border-radius: 4px;
             font-size: 0.7rem;
@@ -237,9 +267,9 @@
         .csp-tile:hover .label { opacity: 1; bottom: 8px; }
 
         .banner-503 {
-            background: rgba(245, 158, 11, 0.1);
-            border: 1px solid var(--yellow);
-            color: var(--yellow);
+            background: rgba(245, 166, 35, 0.1);
+            border: 1px solid var(--warn);
+            color: var(--warn);
             padding: 1rem;
             border-radius: 12px;
             margin-bottom: 1.5rem;
@@ -251,30 +281,30 @@
 
         .flag-tag {
             display: inline-block;
-            background: rgba(239, 68, 68, 0.1);
-            color: var(--red);
+            background: rgba(229, 72, 77, 0.1);
+            color: var(--crit);
             padding: 0.3rem 0.7rem;
             border-radius: 6px;
             font-size: 0.8rem;
             font-weight: 500;
             margin: 0.25rem;
-            border: 1px solid rgba(239, 68, 68, 0.2);
+            border: 1px solid rgba(229, 72, 77, 0.2);
         }
 
         .skill-card {
             background: #000;
-            border: 1px solid var(--border);
+            border: 1px solid var(--line);
             border-radius: 12px;
             padding: 1.2rem;
             margin-bottom: 1rem;
             position: relative;
             transition: border-color 0.2s;
         }
-        .skill-card:hover { border-color: var(--blue); }
-        .skill-card h4 { color: var(--blue); margin-bottom: 0.6rem; font-size: 1rem; }
+        .skill-card:hover { border-color: var(--steel); }
+        .skill-card h4 { color: var(--steel); margin-bottom: 0.6rem; font-size: 1rem; }
         .skill-card pre {
             font-size: 0.8rem;
-            color: var(--text-dim);
+            color: var(--ash);
             white-space: pre-wrap;
             max-height: 120px;
             overflow-y: auto;
@@ -287,15 +317,15 @@
             right: 1rem;
             padding: 0.4rem 0.8rem;
             font-size: 0.75rem;
-            background: var(--border);
-            color: var(--text);
+            background: var(--line);
+            color: var(--parchment);
             border: none;
             border-radius: 6px;
             cursor: pointer;
         }
 
         .btn-secondary {
-            background: var(--gray);
+            background: var(--line-soft);
             color: white;
             border: none;
             padding: 1rem 2.5rem;
@@ -323,8 +353,8 @@
         }
 
         .repair-card {
-            background: rgba(0, 112, 243, 0.05);
-            border: 1px solid var(--blue);
+            background: rgba(111, 155, 255, 0.05);
+            border: 1px solid var(--steel);
             border-radius: 16px;
             padding: 1.5rem;
             margin-bottom: 2rem;
@@ -338,14 +368,14 @@
         }
         .repair-content {
             background: #000;
-            border: 1px solid var(--border);
+            border: 1px solid var(--line);
             border-radius: 12px;
             padding: 1rem;
             font-family: 'Fira Code', monospace;
             font-size: 0.9rem;
             white-space: pre-wrap;
             margin-bottom: 1rem;
-            color: var(--text);
+            color: var(--parchment);
         }
         .repair-actions {
             display: flex;
@@ -353,7 +383,7 @@
         }
 
         .hidden { display: none !important; }
-        .error { color: var(--red); padding: 1rem; border: 1px solid var(--red); border-radius: 12px; margin-bottom: 1.5rem; background: rgba(239, 68, 68, 0.05); }
+        .error { color: var(--crit); padding: 1rem; border: 1px solid var(--crit); border-radius: 12px; margin-bottom: 1.5rem; background: rgba(229, 72, 77, 0.05); }
 
         /* Share Modal */
         .modal-overlay {
@@ -372,8 +402,8 @@
             animation: fadeIn 0.3s ease-out;
         }
         .modal-content {
-            background: var(--card-bg);
-            border: 1px solid var(--border);
+            background: var(--surface);
+            border: 1px solid var(--line);
             border-radius: 20px;
             max-width: 800px;
             width: 100%;
@@ -385,9 +415,9 @@
             position: absolute;
             top: 1rem;
             right: 1rem;
-            background: var(--border);
+            background: var(--line);
             border: none;
-            color: var(--text);
+            color: var(--parchment);
             width: 32px;
             height: 32px;
             border-radius: 50%;
@@ -402,7 +432,7 @@
             margin-bottom: 1.5rem;
             border-radius: 12px;
             overflow: hidden;
-            border: 1px solid var(--border);
+            border: 1px solid var(--line);
             aspect-ratio: 1200 / 630;
             background: #000;
         }
@@ -423,13 +453,13 @@
             display: flex;
             gap: 1rem;
             margin-bottom: 2rem;
-            border-bottom: 1px solid var(--border);
+            border-bottom: 1px solid var(--line);
             padding-bottom: 0.5rem;
         }
         .tab-btn {
             background: none;
             border: none;
-            color: var(--text-dim);
+            color: var(--ash);
             font-size: 1.1rem;
             font-weight: 600;
             padding: 0.5rem 1rem;
@@ -438,7 +468,7 @@
             position: relative;
         }
         .tab-btn.active {
-            color: var(--lava-solid);
+            color: var(--molten-1);
         }
         .tab-btn.active::after {
             content: '';
@@ -472,7 +502,7 @@
         .step-title {
             font-size: 1.5rem;
             font-weight: 700;
-            color: var(--lava-solid);
+            color: var(--molten-1);
             margin-bottom: 0.5rem;
             display: flex;
             align-items: center;
@@ -480,20 +510,20 @@
         }
         .step-badge {
             font-size: 0.8rem;
-            background: var(--border);
+            background: var(--line);
             padding: 2px 8px;
             border-radius: 4px;
-            color: var(--text-dim);
+            color: var(--ash);
         }
         .step-hint {
-            color: var(--text-dim);
+            color: var(--ash);
             font-size: 0.95rem;
             font-style: italic;
         }
 
         .progress-container {
             margin-bottom: 2rem;
-            background: var(--border);
+            background: var(--line);
             height: 6px;
             border-radius: 3px;
             overflow: hidden;
@@ -507,7 +537,7 @@
 
         .live-preview {
             background: #000;
-            border: 1px solid var(--border);
+            border: 1px solid var(--line);
             border-radius: 12px;
             padding: 1rem;
             margin-top: 2rem;
@@ -515,7 +545,7 @@
         .live-preview h4 {
             font-size: 0.8rem;
             text-transform: uppercase;
-            color: var(--text-dim);
+            color: var(--ash);
             margin-bottom: 0.5rem;
             letter-spacing: 0.05em;
         }
@@ -524,11 +554,11 @@
             font-size: 0.9rem;
             white-space: pre-wrap;
             min-height: 3em;
-            color: var(--text);
+            color: var(--parchment);
         }
         .preview-content:empty::before {
             content: 'Начните заполнять шаги, чтобы увидеть промт...';
-            color: var(--gray);
+            color: var(--line-soft);
         }
 
         .wizard-actions {
@@ -546,7 +576,7 @@
         /* History Panel */
         .history-panel {
             margin-top: 2rem;
-            border-top: 1px solid var(--border);
+            border-top: 1px solid var(--line);
             padding-top: 2rem;
         }
         .history-header {
@@ -562,8 +592,8 @@
             gap: 0.75rem;
         }
         .history-item {
-            background: var(--card-bg);
-            border: 1px solid var(--border);
+            background: var(--surface);
+            border: 1px solid var(--line);
             border-radius: 10px;
             padding: 0.75rem 1rem;
             display: flex;
@@ -573,7 +603,7 @@
             transition: all 0.2s;
         }
         .history-item:hover {
-            border-color: var(--lava-solid);
+            border-color: var(--molten-1);
             transform: translateX(4px);
         }
         .history-info {
@@ -584,7 +614,7 @@
         }
         .history-prompt {
             font-size: 0.9rem;
-            color: var(--text);
+            color: var(--parchment);
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -592,7 +622,7 @@
         }
         .history-meta {
             font-size: 0.75rem;
-            color: var(--text-dim);
+            color: var(--ash);
         }
         .history-score {
             font-weight: 800;
@@ -601,15 +631,17 @@
             border-radius: 6px;
             min-width: 50px;
             text-align: center;
+            font-family: ui-monospace, "SF Mono", monospace;
+            font-variant-numeric: tabular-nums;
         }
-        .score-low { color: var(--red); background: rgba(239, 68, 68, 0.1); }
-        .score-mid { color: var(--yellow); background: rgba(245, 158, 11, 0.1); }
-        .score-high { color: var(--green); background: rgba(16, 185, 129, 0.1); }
+        .score-low { color: var(--crit); background: rgba(229, 72, 77, 0.1); }
+        .score-mid { color: var(--warn); background: rgba(245, 166, 35, 0.1); }
+        .score-high { color: var(--good); background: rgba(70, 196, 138, 0.1); }
         
         .clear-history-btn {
             background: transparent;
-            color: var(--red);
-            border: 1px solid var(--red);
+            color: var(--crit);
+            border: 1px solid var(--crit);
             padding: 0.3rem 0.6rem;
             border-radius: 6px;
             font-size: 0.75rem;
@@ -617,11 +649,34 @@
             transition: all 0.2s;
         }
         .clear-history-btn:hover {
-            background: var(--red);
+            background: var(--crit);
             color: white;
         }
+        .icon {
+            width: 18px;
+            height: 18px;
+            vertical-align: -3px;
+            stroke-width: 1.6;
+            fill: none;
+            stroke: currentColor;
+            flex-shrink: 0;
+        }
+
+        h3 .icon {
+            color: var(--molten-core);
+            width: 20px;
+            height: 20px;
+            margin-right: .6rem;
+        }
+
+        .btn-primary .icon, .btn-secondary .icon {
+            color: inherit;
+        }
+
         .chevron {
             transition: transform 0.3s;
+            display: inline-flex;
+            align-items: center;
         }
         .collapsed .chevron {
             transform: rotate(-90deg);
@@ -647,14 +702,14 @@
         }
         .stat-card {
             background: #000;
-            border: 1px solid var(--border);
+            border: 1px solid var(--line);
             border-radius: 12px;
             padding: 1rem;
             text-align: center;
         }
         .stat-card .label {
             font-size: 0.75rem;
-            color: var(--text-dim);
+            color: var(--ash);
             text-transform: uppercase;
             letter-spacing: 0.05em;
             margin-bottom: 0.25rem;
@@ -662,7 +717,9 @@
         .stat-card .value {
             font-size: 1.5rem;
             font-weight: 800;
-            color: var(--lava-solid);
+            color: var(--molten-1);
+            font-family: ui-monospace, "SF Mono", monospace;
+            font-variant-numeric: tabular-nums;
         }
         .charts-grid {
             display: grid;
@@ -671,7 +728,7 @@
         }
         .chart-box {
             background: #000;
-            border: 1px solid var(--border);
+            border: 1px solid var(--line);
             border-radius: 12px;
             padding: 1rem;
             min-height: 220px;
@@ -680,7 +737,7 @@
         }
         .chart-box h4 {
             font-size: 0.85rem;
-            color: var(--text-dim);
+            color: var(--ash);
             margin-bottom: 1rem;
             text-align: center;
         }
@@ -701,6 +758,7 @@
 <body>
     <div class="container">
         <header>
+            <span class="eyebrow">Evaluation Engine</span>
             <h1>SuperPromt</h1>
             <p class="subtitle">Интеллектуальный конвейер оценки промтов</p>
             <div id="statusIndicator" class="status-badge">
@@ -709,12 +767,15 @@
             </div>
         </header>
 
+        <div class="section-divider"></div>
+
         <div class="tabs">
             <button class="tab-btn active" id="tabEval">Оценка</button>
             <button class="tab-btn" id="tabStudio">Студия</button>
         </div>
 
         <div id="evalView">
+            <span class="eyebrow">Input Prompt</span>
             <div class="card">
                 <div class="examples">
                     <button class="example-btn" data-text="Сделай сайт.">Слишком коротко</button>
@@ -736,7 +797,7 @@
 
             <div id="repairResult" class="repair-card hidden">
                 <div class="repair-header">
-                    <h3>✨ Улучшенный вариант</h3>
+                    <h3><span id="repairIcon"></span> Улучшенный вариант</h3>
                     <div class="repair-actions">
                         <button id="applyRepairBtn" class="example-btn" style="color: var(--green); border-color: var(--green)">Подставить в поле</button>
                         <button id="copyRepairBtn" class="example-btn">Копировать</button>
@@ -747,6 +808,7 @@
         </div>
 
         <div id="studioView" class="hidden">
+            <span class="eyebrow">Prompt Studio</span>
             <div class="card studio-container">
                 <div class="progress-container">
                     <div id="studioProgress" class="progress-bar"></div>
@@ -776,7 +838,7 @@
         </div>
 
         <div id="banner503" class="banner-503 hidden">
-            <span>⚠️</span>
+            <span id="alertIcon"></span>
             <div>
                 <strong>Режим ограниченной оценки.</strong> 
                 Сейчас работает быстрый детерминированный анализ. Для глубокой оценки (LLM-судья) необходимо настроить провайдера (BYOK).
@@ -786,9 +848,11 @@
         <div id="error" class="error hidden"></div>
 
         <div id="results" class="hidden">
+            <div class="section-divider"></div>
             <div class="results-grid">
                 <div class="card">
-                    <h3>Метрика PSQ</h3>
+                    <span class="eyebrow">Metrics</span>
+                    <h3><span id="psqIcon"></span> Метрика PSQ</h3>
                     <div class="psq-score-container">
                         <div id="psqValue" class="psq-score">0.00</div>
                     </div>
@@ -797,19 +861,22 @@
 
                     <div id="flagsList" style="margin-top: 2rem;"></div>
                     <button id="shareCardBtn" class="btn-secondary" style="margin-top: 1.5rem; width: 100%; background: rgba(255, 77, 0, 0.1); border: 1px solid rgba(255, 77, 0, 0.3); color: var(--lava-solid);">
-                        <span>🖼️</span> Поделиться карточкой
+                        <span id="shareIcon"></span> Поделиться карточкой
                     </button>
                 </div>
                 <div class="card">
-                    <h3>Рекомендованные скиллы</h3>
+                    <span class="eyebrow">Recommendations</span>
+                    <h3><span id="skillsIcon"></span> Рекомендованные скиллы</h3>
                     <div id="skillsList"></div>
                 </div>
             </div>
         </div>
 
         <div class="history-panel collapsed" id="statsPanel">
+            <div class="section-divider"></div>
             <div class="history-header" id="statsToggle">
-                <h3>📊 Аналитика <span class="chevron">▼</span></h3>
+                <span class="eyebrow">Analytics</span>
+                <h3 id="statsTitle">Аналитика <span class="chevron"></span></h3>
             </div>
             <div class="stats-container">
                 <div class="stats-cards">
@@ -844,8 +911,10 @@
         </div>
 
         <div class="history-panel" id="historyPanel">
+            <div class="section-divider"></div>
             <div class="history-header" id="historyToggle">
-                <h3>📜 История оценок <span class="chevron">▼</span></h3>
+                <span class="eyebrow">History</span>
+                <h3 id="historyTitle">История оценок <span class="chevron"></span></h3>
                 <button id="clearHistoryBtn" class="clear-history-btn">Очистить историю</button>
             </div>
             <div class="history-list" id="historyList"></div>
@@ -862,17 +931,82 @@
             </div>
             <div class="share-actions">
                 <button id="downloadPngBtn" class="btn-primary" style="padding: 0.8rem 1.5rem;">
-                    <span>💾</span> Скачать PNG
+                    <span id="downloadIcon"></span> Скачать PNG
                 </button>
                 <button id="copyCardBtn" class="btn-secondary" style="padding: 0.8rem 1.5rem;">
-                    <span>📋</span> Копировать
+                    <span id="copyIcon"></span> Копировать
                 </button>
             </div>
         </div>
     </div>
 
+    <script src="/static/icons.js"></script>
     <script>
         const el = (id) => document.getElementById(id);
+
+        function renderGauge(containerEl, value) {
+            const color = value < 0.5 ? 'var(--crit)' : (value < 0.8 ? 'var(--warn)' : 'var(--good)');
+            const radius = 40;
+            const circumference = Math.PI * radius;
+            const offset = circumference - (value * circumference);
+            
+            containerEl.innerHTML = `
+                <svg class="psq-gauge-svg" viewBox="0 0 100 55">
+                    <path class="psq-gauge-bg" d="M 10 50 A 40 40 0 0 1 90 50" />
+                    <path class="psq-gauge-fill" d="M 10 50 A 40 40 0 0 1 90 50" 
+                        style="stroke: ${color}; stroke-dasharray: ${circumference}; stroke-dashoffset: ${circumference};" />
+                </svg>
+                <div class="psq-score">0.00</div>
+            `;
+
+            const fill = containerEl.querySelector('.psq-gauge-fill');
+            const scoreEl = containerEl.querySelector('.psq-score');
+            
+            // Trigger animation
+            requestAnimationFrame(() => {
+                fill.style.strokeDashoffset = offset;
+            });
+
+            // Count up
+            let start = 0;
+            const duration = 900;
+            const startTime = performance.now();
+
+            function update(now) {
+                const elapsed = now - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                const easeProgress = 1 - Math.pow(1 - progress, 3); // easeOutCubic
+                const current = easeProgress * value;
+                scoreEl.textContent = current.toFixed(2);
+                if (progress < 1) requestAnimationFrame(update);
+            }
+            requestAnimationFrame(update);
+        }
+
+        function updateTabIndicator() {
+            const activeTab = document.querySelector('.tab-btn.active');
+            const indicator = el('tabIndicator');
+            if (activeTab && indicator) {
+                indicator.style.width = `${activeTab.offsetWidth}px`;
+                indicator.style.transform = `translateX(${activeTab.offsetLeft}px)`;
+            }
+        }
+
+        function revealSections() {
+            const sections = document.querySelectorAll('.reveal');
+            sections.forEach((sec, i) => {
+                setTimeout(() => {
+                    sec.classList.add('in');
+                }, i * 70);
+            });
+        }
+
+        window.addEventListener('load', () => {
+            updateTabIndicator();
+            revealSections();
+        });
+        window.addEventListener('resize', updateTabIndicator);
+
         const cspLabels = [
             "Предметная область", "Целевая операция", "Формат выхода", 
             "Критерии качества", "Контекстные якоря", "Роль", 
@@ -899,6 +1033,7 @@
             el('tabStudio').classList.remove('active');
             el('evalView').classList.remove('hidden');
             el('studioView').classList.add('hidden');
+            updateTabIndicator();
         };
 
         el('tabStudio').onclick = () => {
@@ -906,6 +1041,7 @@
             el('tabEval').classList.remove('active');
             el('studioView').classList.remove('hidden');
             el('evalView').classList.add('hidden');
+            updateTabIndicator();
             initStudio();
         };
 
@@ -940,8 +1076,8 @@
 
         function updateStudioUI() {
             const isLast = currentStudioStep === cspSteps.length - 1;
-            el('nextStep').textContent = isLast ? 'Завершить' : 'Далее';
-            el('prevStep').style.visibility = currentStudioStep === 0 ? 'hidden' : 'visible';
+        el('prevStep').innerHTML = ICONS.arrowLeft + ' Назад';
+        el('nextStep').innerHTML = isLast ? 'Завершить' : 'Далее ' + ICONS.arrowRight;
             
             const progress = ((currentStudioStep + 1) / cspSteps.length) * 100;
             el('studioProgress').style.width = `${progress}%`;
@@ -994,13 +1130,13 @@
             const stepsContainer = el('wizardSteps');
             stepsContainer.innerHTML = `
                 <div class="studio-final">
-                    <h2 style="margin-bottom: 1rem;">✨ Промт готов!</h2>
+                    <h2 style="margin-bottom: 1rem;">Промт готов!</h2>
                     <div class="actions-row" style="justify-content: center;">
                         <button id="studioEvalBtn" class="btn-primary">
                             <span class="spinner"></span>
                             <span class="btn-text">Оценить результат</span>
                         </button>
-                        <button id="studioCopyBtn" class="btn-secondary">Скопировать</button>
+                        <button id="studioCopyBtn" class="btn-secondary">${ICONS.copy} Скопировать</button>
                         <button onclick="location.reload()" class="example-btn">Начать заново</button>
                     </div>
                 </div>
@@ -1024,7 +1160,7 @@
                     if (res.status === 503) {
                         el('studioResults').innerHTML = `
                             <div class="banner-503" style="margin-top: 1.5rem;">
-                                <span>⚠️</span>
+                                ${ICONS.triangleAlert}
                                 <div><strong>Режим ограниченной оценки.</strong> Собранный промт качественный и требует глубокой оценки LLM-судьёй. Настройте провайдера (BYOK) для балла PSQ — либо просто скопируйте готовый промт.</div>
                             </div>`;
                         el('studioResults').classList.remove('hidden');
@@ -1034,7 +1170,7 @@
                     if (!res.ok || typeof data.psq !== 'number') {
                         el('studioResults').innerHTML = `
                             <div class="banner-503" style="margin-top: 1.5rem;">
-                                <span>⚠️</span>
+                                ${ICONS.triangleAlert}
                                 <div>Не удалось оценить промт (${(data && data.detail) ? String(data.detail).slice(0,120) : res.status}).</div>
                             </div>`;
                         el('studioResults').classList.remove('hidden');
@@ -1045,7 +1181,7 @@
                     el('studioResults').innerHTML = `
                         <div class="results-grid" style="margin-top: 2rem;">
                             <div class="card">
-                                <h3>Метрика PSQ</h3>
+                                <h3>${ICONS.gauge} Метрика PSQ</h3>
                                 <div class="psq-score-container">
                                     <div id="studioPsqValue" class="psq-score">${data.psq.toFixed(2)}</div>
                                 </div>
@@ -1070,7 +1206,7 @@
                 } catch (e) {
                     el('studioResults').innerHTML = `
                         <div class="banner-503" style="margin-top: 1.5rem;">
-                            <span>⚠️</span><div>Ошибка сети при оценке. Попробуйте ещё раз.</div>
+                            ${ICONS.triangleAlert}<div>Ошибка сети при оценке. Попробуйте ещё раз.</div>
                         </div>`;
                     el('studioResults').classList.remove('hidden');
                 } finally {
@@ -1182,13 +1318,34 @@
                     new ClipboardItem({ 'image/png': blob })
                 ]);
                 const originalText = el('copyCardBtn').innerHTML;
-                el('copyCardBtn').innerHTML = '<span>✅</span> Скопировано!';
+                el('copyCardBtn').textContent = 'Скопировано';
                 setTimeout(() => el('copyCardBtn').innerHTML = originalText, 2000);
             } catch (err) {
                 console.error('Clipboard error', err);
                 el('downloadPngBtn').click();
             }
         };
+
+        // Инициализация иконок
+        function initIcons() {
+            const iconMap = {
+                'repairIcon': ICONS.listCheck,
+                'psqIcon': ICONS.gauge,
+                'shareIcon': ICONS.share,
+                'skillsIcon': ICONS.listCheck,
+                'alertIcon': ICONS.triangleAlert,
+                'downloadIcon': ICONS.download,
+                'copyIcon': ICONS.copy
+            };
+            for (const [id, svg] of Object.entries(iconMap)) {
+                const target = el(id);
+                if (target) target.innerHTML = svg;
+            }
+
+            // Специальная обработка для заголовков с шевронами
+            el('statsTitle').innerHTML = `${ICONS.gauge} Аналитика <span class="chevron">${ICONS.arrowRight}</span>`;
+            el('historyTitle').innerHTML = `${ICONS.listCheck} История оценок <span class="chevron">${ICONS.arrowRight}</span>`;
+        }
 
         // Инициализация статуса
         async function checkStatus() {
@@ -1205,6 +1362,7 @@
             }
         }
         checkStatus();
+        initIcons();
 
         // История
         async function loadHistory() {
@@ -1528,22 +1686,17 @@
             // Сохраняем данные для шеринга
             window.lastResult = data;
 
-            const val = el('psqValue');
-            val.textContent = (data.psq || 0).toFixed(2);
-            
-            if (data.psq < 0.5) val.style.color = 'var(--red)';
-            else if (data.psq < 0.8) val.style.color = 'var(--yellow)';
-            else val.style.color = 'var(--green)';
+            renderGauge(document.querySelector('.psq-score-container'), data.psq);
 
             el('cspGrid').innerHTML = data.c.map((val, i) => `
-                <div class="csp-tile ${val ? 'active' : ''}">
+                <div class="csp-tile ${val ? 'active' : ''}" style="${val ? `animation-delay: ${i * 50}ms` : ''}">
                     <span class="id">c${i+1}</span>
                     <span class="label">${cspLabels[i]}</span>
                 </div>
             `).join('');
 
             el('flagsList').innerHTML = data.flags.length ? 
-                '<h4 style="margin-bottom:0.5rem">Флаги качества:</h4>' + 
+                '<h4 style="margin-bottom:0.5rem">' + ICONS.triangleAlert + ' Флаги качества:</h4>' + 
                 data.flags.map(f => `<span class="flag-tag">${f.name}: ${f.count}</span>`).join('') :
                 '<span style="color: var(--text-dim)">Проблем не обнаружено</span>';
         }
@@ -1561,9 +1714,9 @@
         async function copyText(btn, text) {
             try {
                 await navigator.clipboard.writeText(text);
-                const old = btn.textContent;
-                btn.textContent = '✅';
-                setTimeout(() => btn.textContent = old, 2000);
+                const old = btn.innerHTML;
+                btn.textContent = 'Готово';
+                setTimeout(() => btn.innerHTML = old, 2000);
             } catch (e) { console.error(e); }
         }
     </script>
