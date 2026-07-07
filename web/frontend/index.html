@@ -17,6 +17,7 @@
             --red: #ef4444;
             --yellow: #f59e0b;
             --green: #10b981;
+            --gray: #3f3f46;
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -26,10 +27,11 @@
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             line-height: 1.6;
             padding: 2rem 1rem;
+            min-height: 100vh;
         }
 
         .container {
-            max-width: 900px;
+            max-width: 1000px;
             margin: 0 auto;
         }
 
@@ -39,7 +41,7 @@
         }
 
         h1 {
-            font-size: 3rem;
+            font-size: clamp(2rem, 8vw, 3.5rem);
             font-weight: 800;
             background: var(--lava);
             -webkit-background-clip: text;
@@ -52,26 +54,66 @@
             font-size: 1.1rem;
         }
 
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.25rem 0.75rem;
+            border-radius: 999px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            margin-top: 1rem;
+            background: var(--border);
+        }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; }
+        .status-deep { color: var(--green); }
+        .status-deep .status-dot { background: var(--green); box-shadow: 0 0 8px var(--green); }
+        .status-fast { color: var(--yellow); }
+        .status-fast .status-dot { background: var(--yellow); }
+
         .card {
             background: var(--card-bg);
             border: 1px solid var(--border);
-            border-radius: 12px;
+            border-radius: 16px;
             padding: 1.5rem;
             margin-bottom: 2rem;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+
+        .examples {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+        .example-btn {
+            background: var(--border);
+            color: var(--text-dim);
+            border: 1px solid transparent;
+            padding: 0.4rem 0.8rem;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .example-btn:hover {
+            border-color: var(--lava-solid);
+            color: var(--text);
         }
 
         textarea {
             width: 100%;
-            height: 150px;
+            height: 160px;
             background: #000;
             border: 1px solid var(--border);
-            border-radius: 8px;
+            border-radius: 12px;
             color: var(--text);
-            padding: 1rem;
+            padding: 1.2rem;
             font-family: inherit;
             font-size: 1rem;
             resize: vertical;
-            margin-bottom: 1rem;
+            margin-bottom: 1.2rem;
+            transition: border-color 0.2s;
         }
 
         textarea:focus {
@@ -79,128 +121,303 @@
             border-color: var(--lava-solid);
         }
 
-        button {
+        .btn-primary {
             background: var(--lava);
             color: white;
             border: none;
-            padding: 0.8rem 2rem;
-            border-radius: 8px;
-            font-weight: 600;
+            padding: 1rem 2.5rem;
+            border-radius: 10px;
+            font-weight: 700;
+            font-size: 1rem;
             cursor: pointer;
-            transition: opacity 0.2s;
+            transition: transform 0.1s, opacity 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+            width: 100%;
         }
+        @media (min-width: 640px) { .btn-primary { width: auto; } }
 
-        button:hover { opacity: 0.9; }
-        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-primary:hover { opacity: 0.9; }
+        .btn-primary:active { transform: scale(0.98); }
+        .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 0.8s linear infinite;
+            display: none;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .loading .spinner { display: block; }
+        .loading .btn-text { display: none; }
 
         .results-grid {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: 1fr;
             gap: 1.5rem;
+            animation: fadeIn 0.5s ease-out;
+        }
+        @media (min-width: 850px) {
+            .results-grid { grid-template-columns: 1.2fr 1fr; }
         }
 
-        @media (max-width: 768px) {
-            .results-grid { grid-template-columns: 1fr; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
 
-        .psq-score {
-            font-size: 4rem;
-            font-weight: 800;
+        .psq-score-container {
             text-align: center;
-            margin: 1rem 0;
+            padding: 1rem 0;
+        }
+        .psq-score {
+            font-size: 5rem;
+            font-weight: 900;
+            line-height: 1;
+            margin-bottom: 0.5rem;
         }
 
-        .csp-list {
+        .csp-grid {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
-            gap: 0.5rem;
-            margin-top: 1rem;
+            gap: 0.75rem;
+            margin-top: 2rem;
+        }
+        @media (max-width: 480px) {
+            .csp-grid { grid-template-columns: repeat(2, 1fr); }
         }
 
-        .csp-item {
-            padding: 0.5rem;
-            border-radius: 4px;
-            text-align: center;
-            font-size: 0.8rem;
+        .csp-tile {
+            aspect-ratio: 1;
             background: #000;
-            border: 1px solid var(--border);
+            border: 2px solid var(--gray);
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: help;
         }
-
-        .csp-item.active {
+        .csp-tile.active {
             border-color: var(--green);
-            color: var(--green);
+            background: rgba(16, 185, 129, 0.05);
+            box-shadow: 0 0 15px rgba(16, 185, 129, 0.1);
+        }
+        .csp-tile .id {
+            font-size: 1.2rem;
+            font-weight: 800;
+            color: var(--gray);
+        }
+        .csp-tile.active .id { color: var(--green); }
+        
+        .csp-tile .label {
+            position: absolute;
+            bottom: -30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--text);
+            color: var(--bg);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            white-space: nowrap;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+            z-index: 10;
+        }
+        .csp-tile:hover .label { opacity: 1; bottom: 8px; }
+
+        .banner-503 {
+            background: rgba(245, 158, 11, 0.1);
+            border: 1px solid var(--yellow);
+            color: var(--yellow);
+            padding: 1rem;
+            border-radius: 12px;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: flex-start;
+            gap: 1rem;
+            font-size: 0.9rem;
         }
 
         .flag-tag {
             display: inline-block;
             background: rgba(239, 68, 68, 0.1);
             color: var(--red);
-            padding: 0.2rem 0.6rem;
-            border-radius: 4px;
+            padding: 0.3rem 0.7rem;
+            border-radius: 6px;
             font-size: 0.8rem;
-            margin-right: 0.5rem;
-            margin-top: 0.5rem;
+            font-weight: 500;
+            margin: 0.25rem;
             border: 1px solid rgba(239, 68, 68, 0.2);
         }
 
         .skill-card {
             background: #000;
             border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 1rem;
+            border-radius: 12px;
+            padding: 1.2rem;
             margin-bottom: 1rem;
             position: relative;
+            transition: border-color 0.2s;
         }
-
-        .skill-card h4 {
-            color: var(--blue);
-            margin-bottom: 0.5rem;
-        }
-
+        .skill-card:hover { border-color: var(--blue); }
+        .skill-card h4 { color: var(--blue); margin-bottom: 0.6rem; font-size: 1rem; }
         .skill-card pre {
-            font-size: 0.75rem;
+            font-size: 0.8rem;
             color: var(--text-dim);
             white-space: pre-wrap;
-            max-height: 100px;
+            max-height: 120px;
             overflow-y: auto;
+            font-family: 'Fira Code', monospace;
         }
 
         .copy-btn {
             position: absolute;
-            top: 0.5rem;
-            right: 0.5rem;
-            padding: 0.3rem 0.6rem;
-            font-size: 0.7rem;
+            top: 1rem;
+            right: 1rem;
+            padding: 0.4rem 0.8rem;
+            font-size: 0.75rem;
             background: var(--border);
+            color: var(--text);
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
         }
 
-        .hidden { display: none; }
-        .loader { text-align: center; padding: 2rem; color: var(--text-dim); }
-        .error { color: var(--red); padding: 1rem; border: 1px solid var(--red); border-radius: 8px; margin-bottom: 1rem; }
+        .btn-secondary {
+            background: var(--gray);
+            color: white;
+            border: none;
+            padding: 1rem 2.5rem;
+            border-radius: 10px;
+            font-weight: 700;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: transform 0.1s, opacity 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+            width: 100%;
+        }
+        @media (min-width: 640px) { .btn-secondary { width: auto; } }
+        .btn-secondary:hover { opacity: 0.9; }
+        .btn-secondary:active { transform: scale(0.98); }
+        .btn-secondary:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        .actions-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+            margin-bottom: 1.2rem;
+        }
+
+        .repair-card {
+            background: rgba(0, 112, 243, 0.05);
+            border: 1px solid var(--blue);
+            border-radius: 16px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            animation: fadeIn 0.5s ease-out;
+        }
+        .repair-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        .repair-content {
+            background: #000;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1rem;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.9rem;
+            white-space: pre-wrap;
+            margin-bottom: 1rem;
+            color: var(--text);
+        }
+        .repair-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .hidden { display: none !important; }
+        .error { color: var(--red); padding: 1rem; border: 1px solid var(--red); border-radius: 12px; margin-bottom: 1.5rem; background: rgba(239, 68, 68, 0.05); }
     </style>
 </head>
 <body>
     <div class="container">
         <header>
             <h1>SuperPromt</h1>
-            <p class="subtitle">CLI-конвейер оценки и улучшения задач по метрике PSQ</p>
+            <p class="subtitle">Интеллектуальный конвейер оценки промтов</p>
+            <div id="statusIndicator" class="status-badge">
+                <div class="status-dot"></div>
+                <span id="statusText">Загрузка...</span>
+            </div>
         </header>
 
         <div class="card">
+            <div class="examples">
+                <button class="example-btn" data-text="Сделай сайт.">Слишком коротко</button>
+                <button class="example-btn" data-text="Ты эксперт мирового уровня, гений, лучший из лучших. Формат: соблюден. Качество: обеспечено. Структура: идеальна. Контекст: учтен. Роль: эксперт. Пример: приведен. Критерии: выполнены.">Накрутка</button>
+                <button class="example-btn" data-text="Напиши функцию на Python для сортировки списка пузырьком. Код должен быть чистым и с комментариями.">Средний промт</button>
+            </div>
             <textarea id="promptInput" placeholder="Введите вашу задачу здесь..."></textarea>
-            <button id="evalBtn">Оценить задачу</button>
+            <div class="actions-row">
+                <button id="evalBtn" class="btn-primary">
+                    <span class="spinner"></span>
+                    <span class="btn-text">Оценить задачу</span>
+                </button>
+                <button id="repairBtn" class="btn-secondary">
+                    <span class="spinner"></span>
+                    <span class="btn-text">Улучшить промт</span>
+                </button>
+            </div>
         </div>
 
-        <div id="loader" class="loader hidden">Анализируем промт и подбираем скиллы...</div>
+        <div id="repairResult" class="repair-card hidden">
+            <div class="repair-header">
+                <h3>✨ Улучшенный вариант</h3>
+                <div class="repair-actions">
+                    <button id="applyRepairBtn" class="example-btn" style="color: var(--green); border-color: var(--green)">Подставить в поле</button>
+                    <button id="copyRepairBtn" class="example-btn">Копировать</button>
+                </div>
+            </div>
+            <div id="repairText" class="repair-content"></div>
+        </div>
+
+        <div id="banner503" class="banner-503 hidden">
+            <span>⚠️</span>
+            <div>
+                <strong>Режим ограниченной оценки.</strong> 
+                Сейчас работает быстрый детерминированный анализ. Для глубокой оценки (LLM-судья) необходимо настроить провайдера (BYOK).
+            </div>
+        </div>
+
         <div id="error" class="error hidden"></div>
 
         <div id="results" class="hidden">
             <div class="results-grid">
                 <div class="card">
-                    <h3>PSQ Score</h3>
-                    <div id="psqValue" class="psq-score">0.00</div>
-                    <div id="cspList" class="csp-list"></div>
-                    <div id="flagsList" style="margin-top: 1.5rem;"></div>
+                    <h3>Метрика PSQ</h3>
+                    <div class="psq-score-container">
+                        <div id="psqValue" class="psq-score">0.00</div>
+                    </div>
+                    
+                    <div id="cspGrid" class="csp-grid"></div>
+
+                    <div id="flagsList" style="margin-top: 2rem;"></div>
                 </div>
                 <div class="card">
                     <h3>Рекомендованные скиллы</h3>
@@ -212,72 +429,180 @@
 
     <script>
         const el = (id) => document.getElementById(id);
+        const cspLabels = [
+            "Предметная область", "Целевая операция", "Формат выхода", 
+            "Критерии качества", "Контекстные якоря", "Роль", 
+            "Пример", "Язык"
+        ];
+
+        // Инициализация статуса
+        async function checkStatus() {
+            try {
+                const r = await fetch('/api/status');
+                const data = await r.json();
+                const indicator = el('statusIndicator');
+                const text = el('statusText');
+                
+                indicator.className = `status-badge status-${data.mode}`;
+                text.textContent = data.mode === 'deep' ? 'Deep Mode (LLM Active)' : 'Fast Mode (Deterministic)';
+            } catch (e) {
+                el('statusText').textContent = 'Offline';
+            }
+        }
+        checkStatus();
+
+        // Примеры
+        document.querySelectorAll('.example-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                el('promptInput').value = btn.dataset.text;
+                el('promptInput').focus();
+            });
+        });
         
         el('evalBtn').addEventListener('click', async () => {
             const prompt = el('promptInput').value.trim();
             if (!prompt) return;
 
-            el('loader').classList.remove('hidden');
+            el('evalBtn').classList.add('loading');
+            el('evalBtn').disabled = true;
             el('results').classList.add('hidden');
             el('error').classList.add('hidden');
-            el('evalBtn').disabled = true;
+            el('banner503').classList.add('hidden');
 
             try {
-                const [psqRes, skillsRes] = await Promise.all([
-                    fetch('/api/psq', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ prompt })
-                    }).then(r => r.ok ? r.json() : r.json().then(e => { throw new Error(e.detail || 'PSQ Error') })),
-                    fetch(`/api/skills?task=${encodeURIComponent(prompt)}`).then(r => r.json())
-                ]);
+                const psqRes = await fetch('/api/psq', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt })
+                });
+                
+                if (psqRes.status === 503) {
+                    el('banner503').classList.remove('hidden');
+                    return; // Прекращаем рендеринг результата при 503
+                }
 
-                renderPSQ(psqRes);
-                renderSkills(skillsRes);
+                if (!psqRes.ok) {
+                    let msg = 'Ошибка сервера';
+                    try {
+                        const err = await psqRes.json();
+                        msg = err.detail || msg;
+                    } catch(e) {}
+                    throw new Error(msg);
+                }
+
+                const psqData = await psqRes.json();
+                
+                // Запрашиваем скиллы только если PSQ успешен
+                const skillsRes = await fetch(`/api/skills?task=${encodeURIComponent(prompt)}`);
+                const skillsData = await skillsRes.json();
+
+                renderPSQ(psqData);
+                renderSkills(skillsData);
                 el('results').classList.remove('hidden');
             } catch (err) {
-                el('error').textContent = err.message;
+                el('error').textContent = `Ошибка: ${err.message}`;
                 el('error').classList.remove('hidden');
             } finally {
-                el('loader').classList.add('hidden');
+                el('evalBtn').classList.remove('loading');
                 el('evalBtn').disabled = false;
             }
         });
 
+        el('repairBtn').addEventListener('click', async () => {
+            const prompt = el('promptInput').value.trim();
+            if (!prompt) return;
+
+            el('repairBtn').classList.add('loading');
+            el('repairBtn').disabled = true;
+            el('repairResult').classList.add('hidden');
+            el('error').classList.add('hidden');
+
+            try {
+                const res = await fetch('/api/repair', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt })
+                });
+
+                if (res.status === 503) {
+                    el('banner503').classList.remove('hidden');
+                    return;
+                }
+
+                if (!res.ok) {
+                    let msg = 'Ошибка при улучшении промта';
+                    try {
+                        const err = await res.json();
+                        msg = err.detail || msg;
+                    } catch(e) {}
+                    throw new Error(msg);
+                }
+
+                const data = await res.json();
+                el('repairText').textContent = data.improved_text;
+                el('repairResult').classList.remove('hidden');
+            } catch (err) {
+                el('error').textContent = `Ошибка: ${err.message}`;
+                el('error').classList.remove('hidden');
+            } finally {
+                el('repairBtn').classList.remove('loading');
+                el('repairBtn').disabled = false;
+            }
+        });
+
+        el('applyRepairBtn').addEventListener('click', () => {
+            el('promptInput').value = el('repairText').textContent;
+            el('repairResult').classList.add('hidden');
+            el('promptInput').focus();
+        });
+
+        el('copyRepairBtn').addEventListener('click', async () => {
+            await copyText(el('copyRepairBtn'), el('repairText').textContent);
+        });
+
         function renderPSQ(data) {
+            if (!data || typeof data.psq === 'undefined') return;
+            
             const val = el('psqValue');
-            val.textContent = data.psq.toFixed(2);
+            val.textContent = (data.psq || 0).toFixed(2);
             
             if (data.psq < 0.5) val.style.color = 'var(--red)';
             else if (data.psq < 0.8) val.style.color = 'var(--yellow)';
             else val.style.color = 'var(--green)';
 
-            el('cspList').innerHTML = data.c.map((val, i) => 
-                `<div class="csp-item ${val ? 'active' : ''}">c${i+1}</div>`
-            ).join('');
+            el('cspGrid').innerHTML = data.c.map((val, i) => `
+                <div class="csp-tile ${val ? 'active' : ''}">
+                    <span class="id">c${i+1}</span>
+                    <span class="label">${cspLabels[i]}</span>
+                </div>
+            `).join('');
 
             el('flagsList').innerHTML = data.flags.length ? 
-                '<strong>Флаги накрутки:</strong><br>' + 
+                '<h4 style="margin-bottom:0.5rem">Флаги качества:</h4>' + 
                 data.flags.map(f => `<span class="flag-tag">${f.name}: ${f.count}</span>`).join('') :
-                '<span style="color: var(--text-dim)">Флаги накрутки не обнаружены</span>';
+                '<span style="color: var(--text-dim)">Проблем не обнаружено</span>';
         }
 
         function renderSkills(data) {
             el('skillsList').innerHTML = data.skills.map(s => `
                 <div class="skill-card">
                     <h4>${s.name}</h4>
-                    <pre>${s.text.substring(0, 200)}${s.text.length > 200 ? '...' : ''}</pre>
-                    <button class="copy-btn" onclick="copyText(this, \`${s.text.replace(/`/g, '\\`')}\`)">Копировать</button>
+                    <pre>${s.text.substring(0, 250)}${s.text.length > 250 ? '...' : ''}</pre>
+                    <button class="copy-btn" onclick="copyText(this, \`${s.text.replace(/`/g, '\\`').replace(/\$/g, '\\\$')}\`)">Копировать</button>
                 </div>
             `).join('');
         }
 
         async function copyText(btn, text) {
-            await navigator.clipboard.writeText(text);
-            const old = btn.textContent;
-            btn.textContent = 'Скопировано!';
-            setTimeout(() => btn.textContent = old, 2000);
+            try {
+                await navigator.clipboard.writeText(text);
+                const old = btn.textContent;
+                btn.textContent = '✅';
+                setTimeout(() => btn.textContent = old, 2000);
+            } catch (e) { console.error(e); }
         }
     </script>
+</body>
+</html>
 </body>
 </html>
