@@ -12,7 +12,7 @@ from pydantic_settings import BaseSettings
 # Добавляем корень проекта в sys.path для импорта superprompt_cli
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-from superprompt_cli import psq, webskills, router
+from superprompt_cli import psq, router, webskills
 
 class Settings(BaseSettings):
     app_name: str = "SuperPromt API"
@@ -66,11 +66,48 @@ class SkillsResponse(BaseModel):
     confidence: float
     skills: List[SkillItem]
 
+class RepairRequest(BaseModel):
+    prompt: str = Field(..., min_length=1)
+
+class RepairResponse(BaseModel):
+    improved_text: str
+
 # --- Endpoints ---
+
+@app.post("/api/repair", response_model=RepairResponse)
+async def repair_prompt(req: RepairRequest):
+    try:
+        # Проверяем наличие ключа для repair
+        has_llm = any(os.environ.get(k) for k in ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GOOGLE_API_KEY"])
+        if not has_llm:
+            raise HTTPException(
+                status_code=503,
+                detail="Улучшение промта недоступно: LLM-провайдер не настроен."
+            )
+        
+        res = psq.repair(req.prompt, settings.repair_model)
+        return {"improved_text": res}
+    except HTTPException:
+        raise
+    except Exception as e:
+        # Если psq.repair упал из-за отсутствия конфигурации провайдера внутри
+        if "no provider" in str(e).lower() or "not configured" in str(e).lower():
+             raise HTTPException(status_code=503, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/health")
 async def health():
     return {"status": "ok", "version": "0.1.0"}
+
+@app.get("/api/status")
+async def get_status():
+    # Проверяем наличие ключа (упрощенно, так как superprompt_cli сам управляет провайдерами)
+    # В реальности мы можем проверить наличие OPENAI_API_KEY или аналогичных переменных
+    has_llm = any(os.environ.get(k) for k in ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GOOGLE_API_KEY"])
+    return {
+        "mode": "deep" if has_llm else "fast",
+        "llm_configured": has_llm
+    }
 
 @app.post("/api/psq", response_model=PSQResponse)
 async def calculate_psq(req: PSQRequest):
