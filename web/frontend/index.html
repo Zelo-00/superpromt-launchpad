@@ -387,7 +387,56 @@
             gap: 0.5rem;
         }
 
-        .hidden { display: none !important; }
+        .lang-switcher {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            display: flex;
+            gap: 4px;
+            background: var(--line);
+            padding: 4px;
+            border-radius: 8px;
+            z-index: 100;
+        }
+        .lang-btn {
+            background: transparent;
+            border: none;
+            color: var(--ash);
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .lang-btn.active {
+            background: var(--molten-1);
+            color: white;
+        }
+        .export-actions {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+        .btn-export {
+            background: var(--line);
+            color: var(--parchment);
+            border: 1px solid var(--line-soft);
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.2s;
+        }
+        .btn-export:hover {
+            border-color: var(--steel);
+            background: var(--line-soft);
+        }
+
         .error { color: var(--crit); padding: 1rem; border: 1px solid var(--crit); border-radius: 12px; margin-bottom: 1.5rem; background: rgba(229, 72, 77, 0.05); }
 
         /* Share Modal */
@@ -761,7 +810,12 @@
     </style>
 </head>
 <body>
+    <div class="lang-switcher">
+        <button class="lang-btn active" id="langRu" onclick="setLang('ru')">RU</button>
+        <button class="lang-btn" id="langEn" onclick="setLang('en')">EN</button>
+    </div>
     <div class="container">
+
         <header>
             <div class="header-content">
                 <div id="brandLogoContainer"></div>
@@ -771,7 +825,8 @@
                 </div>
                 <div id="heroForgeContainer" class="hero-forge"></div>
             </div>
-            <p class="subtitle" style="margin-top: 1rem;">Интеллектуальный конвейер оценки промтов</p>
+            <p class="subtitle" style="margin-top: 1rem;" data-i18n="subtitle">Интеллектуальный конвейер оценки промтов</p>
+
             <div id="statusIndicator" class="status-badge">
                 <div class="status-dot"></div>
                 <span id="statusText">Загрузка...</span>
@@ -781,43 +836,45 @@
         <div class="section-divider"></div>
 
         <div class="tabs">
-            <button class="tab-btn active" id="tabEval">Оценка</button>
-            <button class="tab-btn" id="tabStudio">Студия</button>
-            <button class="tab-btn" id="tabCompare">Сравнение</button>
+            <button class="tab-btn active" id="tabEval" data-i18n="tabEval">Оценка</button>
+            <button class="tab-btn" id="tabStudio" data-i18n="tabStudio">Студия</button>
+            <button class="tab-btn" id="tabCompare" data-i18n="tabCompare">Сравнение</button>
             <div id="tabIndicator" style="position: absolute; bottom: -0.6rem; height: 2px; background: var(--lava); transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);"></div>
         </div>
 
+
         <div id="evalView">
-            <span class="eyebrow">Input Prompt</span>
+            <span class="eyebrow" data-i18n="inputPrompt">Input Prompt</span>
             <div class="card">
                 <div class="examples">
-                    <button class="example-btn" data-text="Сделай сайт.">Слишком коротко</button>
-                    <button class="example-btn" data-text="Ты эксперт мирового уровня, гений, лучший из лучших. Формат: соблюден. Качество: обеспечено. Структура: идеальна. Контекст: учтен. Роль: эксперт. Пример: приведен. Критерии: выполнены.">Накрутка</button>
-                    <button class="example-btn" data-text="Напиши функцию на Python для сортировки списка пузырьком. Код должен быть чистым и с комментариями.">Средний промт</button>
+                    <button class="example-btn" data-text="Сделай сайт." data-i18n="exShort">Слишком коротко</button>
+                    <button class="example-btn" data-text="Ты эксперт мирового уровня, гений, лучший из лучших. Формат: соблюден. Качество: обеспечено. Структура: идеальна. Контекст: учтен. Роль: эксперт. Пример: приведен. Критерии: выполнены." data-i18n="exSpam">Накрутка</button>
+                    <button class="example-btn" data-text="Напиши функцию на Python для сортировки списка пузырьком. Код должен быть чистым и с комментариями." data-i18n="exMedium">Средний промт</button>
                 </div>
-                <textarea id="promptInput" placeholder="Введите вашу задачу здесь..."></textarea>
+                <textarea id="promptInput" data-i18n-placeholder="promptPlaceholder" placeholder="Введите вашу задачу здесь..."></textarea>
                 <div class="actions-row">
                     <button id="evalBtn" class="btn-primary">
                         <span class="spinner"></span>
-                        <span class="btn-text">Оценить задачу</span>
+                        <span class="btn-text" data-i18n="evalBtn">Оценить задачу</span>
                     </button>
                     <button id="repairBtn" class="btn-secondary">
                         <span class="spinner"></span>
-                        <span class="btn-text">Улучшить промт</span>
+                        <span class="btn-text" data-i18n="repairBtn">Улучшить промт</span>
                     </button>
                 </div>
             </div>
 
             <div id="repairResult" class="repair-card hidden">
                 <div class="repair-header">
-                    <h3><span id="repairIcon"></span> Улучшенный вариант</h3>
+                    <h3><span id="repairIcon"></span> <span data-i18n="improvedVariant">Улучшенный вариант</span></h3>
                     <div class="repair-actions">
-                        <button id="applyRepairBtn" class="example-btn" style="color: var(--green); border-color: var(--green)">Подставить в поле</button>
-                        <button id="copyRepairBtn" class="example-btn">Копировать</button>
+                        <button id="applyRepairBtn" class="example-btn" style="color: var(--green); border-color: var(--green)" data-i18n="applyRepair">Подставить в поле</button>
+                        <button id="copyRepairBtn" class="example-btn" data-i18n="copy">Копировать</button>
                     </div>
                 </div>
                 <div id="repairText" class="repair-content"></div>
             </div>
+
         </div>
 
         <div id="compareView" class="hidden">
@@ -898,8 +955,8 @@
             <div class="section-divider"></div>
             <div class="results-grid">
                 <div class="card">
-                    <span class="eyebrow">Metrics</span>
-                    <h3><span id="psqIcon"></span> Метрика PSQ</h3>
+                    <span class="eyebrow" data-i18n="metrics">Metrics</span>
+                    <h3><span id="psqIcon"></span> <span data-i18n="psqMetric">Метрика PSQ</span></h3>
                     <div class="psq-score-container">
                         <div id="psqValue" class="psq-score">0.00</div>
                     </div>
@@ -907,17 +964,28 @@
                     <div id="cspGrid" class="csp-grid"></div>
 
                     <div id="flagsList" style="margin-top: 2rem;"></div>
+                    
+                    <div class="export-actions">
+                        <button id="exportJsonBtn" class="btn-export">
+                            <span class="icon-download"></span> JSON
+                        </button>
+                        <button id="exportMdBtn" class="btn-export">
+                            <span class="icon-download"></span> MD
+                        </button>
+                    </div>
+
                     <button id="shareCardBtn" class="btn-secondary" style="margin-top: 1.5rem; width: 100%; background: rgba(255, 77, 0, 0.1); border: 1px solid rgba(255, 77, 0, 0.3); color: var(--lava-solid);">
-                        <span id="shareIcon"></span> Поделиться карточкой
+                        <span id="shareIcon"></span> <span data-i18n="shareCard">Поделиться карточкой</span>
                     </button>
                 </div>
                 <div class="card">
-                    <span class="eyebrow">Recommendations</span>
-                    <h3><span id="skillsIcon"></span> Рекомендованные скиллы</h3>
+                    <span class="eyebrow" data-i18n="recommendations">Recommendations</span>
+                    <h3><span id="skillsIcon"></span> <span data-i18n="recommendedSkills">Рекомендованные скиллы</span></h3>
                     <div id="skillsList"></div>
                 </div>
             </div>
         </div>
+
 
         <div class="history-panel collapsed" id="statsPanel">
             <div class="section-divider"></div>
@@ -928,32 +996,33 @@
             <div class="stats-container">
                 <div class="stats-cards">
                     <div class="stat-card">
-                        <div class="label">Всего оценок</div>
+                        <div class="label" data-i18n="totalEvals">Всего оценок</div>
                         <div class="value" id="statTotal">0</div>
                     </div>
                     <div class="stat-card">
-                        <div class="label">Средний PSQ</div>
+                        <div class="label" data-i18n="avgPsq">Средний PSQ</div>
                         <div class="value" id="statAvg">0.00</div>
                     </div>
                     <div class="stat-card">
-                        <div class="label">Ниже 0.8</div>
+                        <div class="label" data-i18n="below8">Ниже 0.8</div>
                         <div class="value" id="statLow">0%</div>
                     </div>
                 </div>
                 <div class="charts-grid">
                     <div class="chart-box">
-                        <h4>Тренд PSQ</h4>
+                        <h4 data-i18n="psqTrend">Тренд PSQ</h4>
                         <canvas id="chartPSQ"></canvas>
                     </div>
                     <div class="chart-box">
-                        <h4>Флаги накрутки</h4>
+                        <h4 data-i18n="spamFlags">Флаги накрутки</h4>
                         <canvas id="chartFlags"></canvas>
                     </div>
                     <div class="chart-box">
-                        <h4>Режимы (Fast vs Deep)</h4>
+                        <h4 data-i18n="modes">Режимы (Fast vs Deep)</h4>
                         <canvas id="chartModes"></canvas>
                     </div>
                 </div>
+
             </div>
         </div>
 
@@ -991,6 +1060,122 @@
     <script src="/static/icons.js"></script>
     <script>
         const el = (id) => document.getElementById(id);
+
+        const I18N = {
+            ru: {
+                subtitle: "Интеллектуальный конвейер оценки промтов",
+                tabEval: "Оценка",
+                tabStudio: "Студия",
+                tabCompare: "Сравнение",
+                inputPrompt: "Входной промт",
+                exShort: "Слишком коротко",
+                exSpam: "Накрутка",
+                exMedium: "Средний промт",
+                promptPlaceholder: "Введите вашу задачу здесь...",
+                evalBtn: "Оценить задачу",
+                repairBtn: "Улучшить промт",
+                improvedVariant: "Улучшенный вариант",
+                applyRepair: "Подставить в поле",
+                copy: "Копировать",
+                metrics: "Метрики",
+                psqMetric: "Метрика PSQ",
+                shareCard: "Поделиться карточкой",
+                recommendations: "Рекомендации",
+                recommendedSkills: "Рекомендованные скиллы",
+                analytics: "Аналитика",
+                history: "История оценок",
+                clearHistory: "Очистить историю",
+                totalEvals: "Всего оценок",
+                avgPsq: "Средний PSQ",
+                below8: "Ниже 0.8",
+                psqTrend: "Тренд PSQ",
+                spamFlags: "Флаги накрутки",
+                modes: "Режимы (Fast vs Deep)",
+                emptyHistory: "История пуста",
+                promptReady: "Промт готов!",
+                evalResult: "Оценить результат",
+                startOver: "Начать заново",
+                step: "Шаг",
+                skip: "Пропустить",
+                next: "Далее",
+                prev: "Назад",
+                livePreview: "Живой предпросмотр",
+                previewHint: "Начните заполнять шаги, чтобы увидеть промт...",
+                qualityFlags: "Флаги качества:",
+                noProblems: "Проблем не обнаружено"
+            },
+            en: {
+                subtitle: "Intelligent Prompt Evaluation Pipeline",
+                tabEval: "Evaluation",
+                tabStudio: "Studio",
+                tabCompare: "Comparison",
+                inputPrompt: "Input Prompt",
+                exShort: "Too short",
+                exSpam: "Spam/Gaming",
+                exMedium: "Medium prompt",
+                promptPlaceholder: "Enter your task here...",
+                evalBtn: "Evaluate Task",
+                repairBtn: "Improve Prompt",
+                improvedVariant: "Improved Variant",
+                applyRepair: "Apply to field",
+                copy: "Copy",
+                metrics: "Metrics",
+                psqMetric: "PSQ Metric",
+                shareCard: "Share Card",
+                recommendations: "Recommendations",
+                recommendedSkills: "Recommended Skills",
+                analytics: "Analytics",
+                history: "Evaluation History",
+                clearHistory: "Clear History",
+                totalEvals: "Total Evals",
+                avgPsq: "Average PSQ",
+                below8: "Below 0.8",
+                psqTrend: "PSQ Trend",
+                spamFlags: "Spam Flags",
+                modes: "Modes (Fast vs Deep)",
+                emptyHistory: "History is empty",
+                promptReady: "Prompt is ready!",
+                evalResult: "Evaluate Result",
+                startOver: "Start Over",
+                step: "Step",
+                skip: "Skip",
+                next: "Next",
+                prev: "Back",
+                livePreview: "Live Preview",
+                previewHint: "Start filling steps to see the prompt...",
+                qualityFlags: "Quality Flags:",
+                noProblems: "No problems detected"
+            }
+        };
+
+        let currentLang = localStorage.getItem('lang') || 'ru';
+
+        function setLang(lang) {
+            currentLang = lang;
+            localStorage.setItem('lang', lang);
+            document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('active'));
+            el(lang === 'ru' ? 'langRu' : 'langEn').classList.add('active');
+            
+            document.querySelectorAll('[data-i18n]').forEach(node => {
+                const key = node.getAttribute('data-i18n');
+                if (I18N[lang][key]) node.textContent = I18N[lang][key];
+            });
+            document.querySelectorAll('[data-i18n-placeholder]').forEach(node => {
+                const key = node.getAttribute('data-i18n-placeholder');
+                if (I18N[lang][key]) node.placeholder = I18N[lang][key];
+            });
+            
+            // Update dynamic labels
+            if (typeof cspLabels !== 'undefined') updateCspLabels();
+            if (typeof initStudio !== 'undefined') updateStudioUI();
+            updateIcons();
+        }
+
+        function updateCspLabels() {
+            const ruLabels = ["Предметная область", "Целевая операция", "Формат выхода", "Критерии качества", "Контекстные якоря", "Роль", "Пример", "Язык"];
+            const enLabels = ["Domain", "Operation", "Format", "Quality Criteria", "Context Anchors", "Role", "Example", "Language"];
+            window.cspLabels = currentLang === 'ru' ? ruLabels : enLabels;
+        }
 
         // Initialize Brand
         if (typeof BRAND !== 'undefined') {
@@ -1177,6 +1362,7 @@
         }
 
         window.addEventListener('load', () => {
+            setLang(currentLang);
             updateTabIndicator();
             revealSections();
         });
@@ -1251,14 +1437,17 @@
 
         function updateStudioUI() {
             const isLast = currentStudioStep === cspSteps.length - 1;
-        el('prevStep').innerHTML = ICONS.arrowLeft + ' Назад';
-        el('nextStep').innerHTML = isLast ? 'Завершить' : 'Далее ' + ICONS.arrowRight;
+            el('prevStep').innerHTML = ICONS.arrowLeft + ' ' + I18N[currentLang].prev;
+            el('nextStep').innerHTML = (isLast ? I18N[currentLang].promptReady : I18N[currentLang].next) + ' ' + ICONS.arrowRight;
+            el('skipStep').textContent = I18N[currentLang].skip;
             
             const progress = ((currentStudioStep + 1) / cspSteps.length) * 100;
             el('studioProgress').style.width = `${progress}%`;
 
             document.querySelectorAll('.wizard-step').forEach((s, i) => {
                 s.classList.toggle('active', i === currentStudioStep);
+                const badge = s.querySelector('.step-badge');
+                if (badge) badge.textContent = `${I18N[currentLang].step} ${i + 1}/8`;
             });
         }
 
@@ -1270,7 +1459,11 @@
                     parts.push(`${step.title}: ${val}`);
                 }
             });
-            el('studioPreview').textContent = parts.join('\n');
+            const preview = el('studioPreview');
+            preview.textContent = parts.join('\n');
+            if (!preview.textContent) {
+                preview.innerHTML = `<span style="color: var(--line-soft)">${I18N[currentLang].previewHint}</span>`;
+            }
         }
 
         el('nextStep').onclick = () => {
@@ -1297,25 +1490,26 @@
 
         async function finishStudio() {
             const prompt = el('studioPreview').textContent.trim();
-            if (!prompt) {
-                alert('Промт пуст. Заполните хотя бы один шаг.');
+            if (!prompt || prompt === I18N[currentLang].previewHint) {
+                alert(currentLang === 'ru' ? 'Промт пуст. Заполните хотя бы один шаг.' : 'Prompt is empty. Fill at least one step.');
                 return;
             }
 
             const stepsContainer = el('wizardSteps');
             stepsContainer.innerHTML = `
                 <div class="studio-final">
-                    <h2 style="margin-bottom: 1rem;">Промт готов!</h2>
+                    <h2 style="margin-bottom: 1rem;" data-i18n="promptReady">${I18N[currentLang].promptReady}</h2>
                     <div class="actions-row" style="justify-content: center;">
                         <button id="studioEvalBtn" class="btn-primary">
                             <span class="spinner"></span>
-                            <span class="btn-text">Оценить результат</span>
+                            <span class="btn-text" data-i18n="evalResult">${I18N[currentLang].evalResult}</span>
                         </button>
-                        <button id="studioCopyBtn" class="btn-secondary">${ICONS.copy} Скопировать</button>
-                        <button onclick="location.reload()" class="example-btn">Начать заново</button>
+                        <button id="studioCopyBtn" class="btn-secondary">${ICONS.copy} <span data-i18n="copy">${I18N[currentLang].copy}</span></button>
+                        <button onclick="location.reload()" class="example-btn" data-i18n="startOver">${I18N[currentLang].startOver}</button>
                     </div>
                 </div>
             `;
+
             el('prevStep').classList.add('hidden');
             el('nextStep').classList.add('hidden');
             el('skipStep').classList.add('hidden');
@@ -1516,11 +1710,16 @@
                 const target = el(id);
                 if (target) target.innerHTML = svg;
             }
+            
+            document.querySelectorAll('.icon-download').forEach(n => n.innerHTML = ICONS.download);
 
             // Специальная обработка для заголовков с шевронами
-            el('statsTitle').innerHTML = `${ICONS.gauge} Аналитика <span class="chevron">${ICONS.arrowRight}</span>`;
-            el('historyTitle').innerHTML = `${ICONS.listCheck} История оценок <span class="chevron">${ICONS.arrowRight}</span>`;
+            el('statsTitle').innerHTML = `${ICONS.gauge} ${I18N[currentLang].analytics} <span class="chevron">${ICONS.arrowRight}</span>`;
+            el('historyTitle').innerHTML = `${ICONS.listCheck} ${I18N[currentLang].history} <span class="chevron">${ICONS.arrowRight}</span>`;
+            el('clearHistoryBtn').textContent = I18N[currentLang].clearHistory;
         }
+        
+        const updateIcons = initIcons;
 
         // Инициализация статуса
         async function checkStatus() {
@@ -1871,10 +2070,46 @@
             `).join('');
 
             el('flagsList').innerHTML = data.flags.length ? 
-                '<h4 style="margin-bottom:0.5rem">' + ICONS.triangleAlert + ' Флаги качества:</h4>' + 
+                '<h4 style="margin-bottom:0.5rem">' + ICONS.triangleAlert + ' ' + I18N[currentLang].qualityFlags + '</h4>' + 
                 data.flags.map(f => `<span class="flag-tag">${f.name}: ${f.count}</span>`).join('') :
-                '<span style="color: var(--text-dim)">Проблем не обнаружено</span>';
+                `<span style="color: var(--text-dim)">${I18N[currentLang].noProblems}</span>`;
         }
+
+        el('exportJsonBtn').onclick = () => {
+            if (!window.lastResult) return;
+            const blob = new Blob([JSON.stringify(window.lastResult, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'psq-result.json';
+            a.click();
+            URL.revokeObjectURL(url);
+        };
+
+        el('exportMdBtn').onclick = () => {
+            if (!window.lastResult) return;
+            const d = window.lastResult;
+            const md = `# PSQ Evaluation Report
+**Date:** ${new Date().toLocaleString()}
+**Prompt:** 
+\`\`\`
+${el('promptInput').value}
+\`\`\`
+
+**PSQ Score:** ${d.psq.toFixed(2)}
+**CSP-8 Analysis:** ${d.c.join('')}
+**Flags:** ${d.flags.map(f => `${f.name} (${f.count})`).join(', ') || 'None'}
+
+Generated by SuperPromt`;
+            const blob = new Blob([md], { type: 'text/markdown' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'psq-result.md';
+            a.click();
+            URL.revokeObjectURL(url);
+        };
+
 
         function renderSkills(data) {
             el('skillsList').innerHTML = data.skills.map(s => `
