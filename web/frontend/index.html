@@ -1685,7 +1685,7 @@
             
             document.querySelectorAll('[data-i18n]').forEach(node => {
                 const key = node.getAttribute('data-i18n');
-                if (I18N[lang][key]) node.textContent = I18N[lang][key];
+                if (I18N[lang][key]) node.innerHTML = I18N[lang][key];
             });
             document.querySelectorAll('[data-i18n-placeholder]').forEach(node => {
                 const key = node.getAttribute('data-i18n-placeholder');
