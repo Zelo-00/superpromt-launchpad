@@ -839,6 +839,71 @@
                 transition-duration: 0.01ms !important;
             }
         }
+        h1 {
+            margin-bottom: 0;
+            font-size: 3rem;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: -0.02em;
+            transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            cursor: default;
+            text-shadow: 
+                0 1px 0 #222,
+                0 2px 0 #1a1a1a,
+                0 3px 0 #111,
+                0 4px 0 #080808,
+                0 5px 0 #050505,
+                0 6px 1px rgba(0,0,0,.1),
+                0 0 5px rgba(0,0,0,.1),
+                0 1px 3px rgba(0,0,0,.3),
+                0 3px 5px rgba(0,0,0,.2),
+                0 5px 10px rgba(0,0,0,.25),
+                0 10px 10px rgba(0,0,0,.2),
+                0 20px 20px rgba(0,0,0,.15),
+                0 0 15px var(--molten-1);
+        }
+        h1:hover {
+            transform: translateY(-4px);
+        }
+        .footer-watermark {
+            padding: 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            color: var(--ash);
+            font-size: 12px;
+            opacity: 0.6;
+        }
+        .molten-dot {
+            width: 4px;
+            height: 4px;
+            background: var(--molten-1);
+            border-radius: 50%;
+            box-shadow: 0 0 6px var(--molten-1);
+        }
+        .about-btn {
+            background: none;
+            border: none;
+            color: var(--ash);
+            cursor: pointer;
+            padding: 8px;
+            display: flex;
+            align-items: center;
+            transition: color 0.2s;
+        }
+        .about-btn:hover {
+            color: var(--molten-1);
+        }
+        .about-content p {
+            margin-bottom: 1rem;
+            line-height: 1.5;
+            color: var(--ash);
+        }
+        .about-content b {
+            color: var(--molten-1);
+        }
+
         .chip-btn {
             background: var(--surface-2);
             border: 1px solid var(--line);
@@ -880,7 +945,13 @@
                 <div id="brandLogoContainer"></div>
                 <div style="display: flex; flex-direction: column; align-items: flex-start;">
                     <span class="eyebrow">Evaluation Engine</span>
-                    <h1 style="margin-bottom: 0;">SuperPromt</h1>
+                <div style="display: flex; align-items: center; gap: 1rem;">
+                    <h1 data-i18n-no-translate>SuperPromt</h1>
+                    <button id="aboutBtn" class="about-btn" title="О проекте">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                    </button>
+                </div>
+
                     <div class="font-switcher" style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
                         <button onclick="updateFont('SpaceGrotesk')" class="chip-btn">Grotesk</button>
                         <button onclick="updateFont('Sora')" class="chip-btn">Sora</button>
@@ -889,7 +960,8 @@
                 </div>
                 <div id="heroForgeContainer" class="hero-forge"></div>
             </div>
-            <p class="subtitle" style="margin-top: 1rem;" data-i18n="subtitle">Интеллектуальный конвейер оценки промтов</p>
+            <p class="subtitle" style="margin-top: 1rem;" data-i18n="subtitle">Опишите задачу — SuperPromt сам доведёт постановку до идеала. Возиться с промтами вручную не нужно.</p>
+
 
             <div id="statusIndicator" class="status-badge">
                 <div class="status-dot"></div>
@@ -921,6 +993,10 @@
                         <span class="spinner"></span>
                         <span class="btn-text" data-i18n="evalBtn">Оценить задачу</span>
                     </button>
+                    <p style="font-size: 11px; color: var(--ash); margin-top: 0.5rem; text-align: center; opacity: 0.8;">
+                        Хотите сэкономить токены? Доведите промт вручную в Студии — это опционально.
+                    </p>
+
                     <button id="repairBtn" class="btn-secondary">
                         <span class="spinner"></span>
                         <span class="btn-text" data-i18n="repairBtn">Улучшить промт</span>
@@ -1120,15 +1196,41 @@
         </div>
     </div>
 
+    <!-- About Modal -->
+    <div id="aboutModal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <button class="modal-close" id="closeAboutModal">&times;</button>
+            <h3 style="margin-bottom: 1.5rem; text-align: center;">О проекте SuperPromt</h3>
+            <div class="about-content">
+                <p><b>SuperPromt</b> автоматизирует постановку задач по метрике PSQ.</p>
+                <p>Режимы:</p>
+                <ul style="color: var(--ash); margin-bottom: 1rem; padding-left: 1.2rem;">
+                    <li><b>Оценка</b> — быстрый детерминированный анализ.</li>
+                    <li><b>Студия</b> — ручная доводка по CSP-8.</li>
+                    <li><b>Сравнение</b> — A/B тестирование промтов.</li>
+                    <li><b>Аналитика</b> — статистика и тренды.</li>
+                </ul>
+                <p>Фишка — <b>анти-накрутка гейт</b> ДО траты токенов LLM.</p>
+            </div>
+        </div>
+    </div>
+
+    <footer class="footer-watermark">
+        <span>Zerno</span>
+        <div class="molten-dot"></div>
+    </footer>
+
     <script src="/static/brand.js"></script>
+
     <script src="/static/icons.js"></script>
     <script>
         const el = (id) => document.getElementById(id);
 
         const I18N = {
             ru: {
-                subtitle: "Интеллектуальный конвейер оценки промтов",
+                subtitle: "Опишите задачу — SuperPromt сам доведёт постановку до идеала. Возиться с промтами вручную не нужно.",
                 tabEval: "Оценка",
+
                 tabStudio: "Студия",
                 tabCompare: "Сравнение",
                 inputPrompt: "Входной промт",
@@ -1169,8 +1271,9 @@
                 noProblems: "Проблем не обнаружено"
             },
             en: {
-                subtitle: "Intelligent Prompt Evaluation Pipeline",
+                subtitle: "Describe your task — SuperPromt perfects the prompt for you. No manual prompt tinkering required.",
                 tabEval: "Evaluation",
+
                 tabStudio: "Studio",
                 tabCompare: "Comparison",
                 inputPrompt: "Input Prompt",
@@ -1735,6 +1838,16 @@
         };
 
         el('closeShareModal').onclick = () => el('shareModal').classList.add('hidden');
+
+        // About Modal Logic
+        const aboutModal = el('aboutModal');
+        const aboutBtn = el('aboutBtn');
+        const closeAboutModal = el('closeAboutModal');
+
+        aboutBtn.onclick = () => aboutModal.classList.remove('hidden');
+        closeAboutModal.onclick = () => aboutModal.classList.add('hidden');
+        aboutModal.onclick = (e) => { if (e.target === aboutModal) aboutModal.classList.add('hidden'); };
+
         
         el('downloadPngBtn').onclick = () => {
             const link = document.createElement('a');
