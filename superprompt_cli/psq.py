@@ -45,7 +45,7 @@ def _parse_json(text):
 def score(prompt, judge_model, cfg=None):
     """-> {'psq','raw_psq','c','a','gaming','flags'}"""
     r = providers.chat(judge_model, [{"role": "user", "content": JUDGE % prompt}],
-                       max_tokens=800, temperature=0.0, cfg=cfg, timeout=180, json_mode=True)
+                       max_tokens=800, temperature=0.0, cfg=cfg, timeout=180, json_mode=False)
     # fail-closed: непарсибельный вывод судьи → худший балл (c=0, a=1) ⇒ ремонт, не ложный PASS
     data = _parse_json(r["text"]) or {"c": [0] * 8, "a": 1.0}
     c = [1 if x else 0 for x in (data.get("c") or [0] * 8)][:8]

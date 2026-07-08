@@ -2,6 +2,7 @@ import os
 import sys
 import time
 import uuid
+import json
 from collections import defaultdict, deque
 from typing import List, Optional, Dict, Any
 
@@ -25,6 +26,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # каталог
 import superprompt_cli.psq as psq
 import superprompt_cli.router as router
 import superprompt_cli.webskills as webskills
+import superprompt_cli.agentloop as agentloop
+import superprompt_cli.providers as providers
+import superprompt_cli.memory as memory
+import superprompt_cli.sessions as sessions
 from storage import HistoryStorage
 
 class Settings(BaseSettings):
@@ -160,6 +165,43 @@ class RepairResponse(BaseModel):
 
 class DemoResponse(BaseModel):
     mode: str = "demo"
+
+class GenerateRequest(BaseModel):
+    prompt: str = Field(..., min_length=1, max_length=MAX_PROMPT_LENGTH)
+    tier: str = Field(default="mid", description="min|mid|max")
+    model: Optional[str] = Field(default=None, description="LLM model (provider/model)")
+
+class GenerateResponse(BaseModel):
+    answer: str
+    passport: Dict[str, Any]
+    journal: str
+    psq_before: Optional[float] = None
+    psq_after: Optional[float] = None
+    domain: str = ""
+    skills_used: List[str] = []
+    files: List[Dict[str, Any]] = []
+    archive_url: Optional[str] = None
+
+class MemoryEvent(BaseModel):
+    ts: str
+    event: str
+    task: Optional[str] = None
+    domain: Optional[str] = None
+    psq: Optional[str] = None
+    steps: Optional[int] = None
+    tokens: Optional[int] = None
+
+class MemoryResponse(BaseModel):
+    core: str
+    core_size: int
+    daily_events: List[MemoryEvent]
+    sessions_count: int
+    total_events: int
+
+class DistillResponse(BaseModel):
+    status: str
+    core_size: int
+    message: str
 
 # --- Endpoints ---
 
@@ -339,7 +381,14 @@ async def clear_history():
 async def get_skills(task: str):
     try:
         domain, confidence, _ = router.classify_conf(task)
-        skills_data = webskills.rank(task, k=3)
+        
+        # LLM-based ranking with fallback to TF-IDF
+        try:
+            from superprompt_cli import config as spt_config
+            cfg = spt_config.load()
+            skills_data = webskills.rank(task, k=10, model=settings.judge_model, cfg=cfg)
+        except Exception:
+            skills_data = webskills.rank(task, k=10)
         
         # Добавляем lean-code если нужно, как это делает router.pick_skills
         skills = []
@@ -356,6 +405,283 @@ async def get_skills(task: str):
         }
     except Exception:
         raise HTTPException(status_code=500, detail="Внутренняя ошибка при подборе скиллов.")
+
+@app.post("/api/generate", response_model=GenerateResponse)
+async def generate_code(req: GenerateRequest):
+    """Полный pipeline: PSQ → ремонт → скиллы → генерация кода LLM → архив."""
+    try:
+        model = req.model or settings.judge_model
+        tier = req.tier
+        work_dir = tempfile.mkdtemp(prefix="spt_gen_")
+
+        try:
+            # 1. Router + skills
+            from superprompt_cli import config as spt_config
+            cfg = spt_config.load()
+            domain, conf, _ = router.classify_conf(req.prompt)
+            skills = webskills.rank(req.prompt, k=5)
+
+            # 2. PSQ gate (3 cycles to ensure PSQ >= 0.8)
+            from superprompt_cli import psq as spt_psq
+            final_prompt, psq_before, psq_after = spt_psq.gate(
+                req.prompt, settings.judge_model, model,
+                max_cycles=3, cfg=cfg, log=lambda m: None)
+
+            # 3. Build system prompt with skills
+            skills_text = "\n".join(f"### {s['name']}\n{s['text'][:500]}" for s in skills)
+            system = f"""Ты — expert full-stack developer. СОЗДАЙ ПОЛНЫЙ ВЕБ-ПРОЕКТ.
+
+Домен: {domain}. Скиллы:\n{skills_text}
+
+КРИТИЧЕСКИ ВАЖНО — СТРУКТУРА ПРОЕКТА:
+Обязательные файлы:
+1. index.html — ГЛАВНЫЙ ФАЙЛ (без него проект не работает!)
+2. css/style.css — стили
+3. js/app.js — логика
+
+Для каждого файла используй отдельный блок кода:
+```html
+<!-- FILE: index.html -->
+<!DOCTYPE html>...
+```
+
+```css
+/* FILE: css/style.css */
+body {{...}}
+```
+
+```javascript
+// FILE: js/app.js
+const app = {{...}}
+```
+
+ТРЕБОВАНИЯ:
+- index.html ОБЯЗАТЕЛЕН — это точка входа проекта
+- CSS: переменные, flexbox/grid, адаптивность
+- JS: модульная структура, обработка событий
+- Для графиков: Chart.js CDN в index.html
+- Минимум 3 файла (html + css + js)
+- Код должен быть ЧИТАЕМЫМ и ПОДДЕРЖИВАЕМЫМ
+- НЕ пиши markdown-описания — только код"""
+
+            # 4. Generate code via LLM
+            r = providers.chat(model, [
+                {"role": "system", "content": system},
+                {"role": "user", "content": final_prompt}
+            ], max_tokens=16000, temperature=0.3, cfg=cfg, timeout=300)
+
+            answer = r["text"]
+
+            # 5. Extract code blocks from answer
+            import re
+            
+            # Pattern 1: FILE: marker in code blocks
+            file_blocks = re.findall(r'```(?:html|css|javascript|js|python)?\s*\n<!--\s*FILE:\s*(\S+)\s*-->|/\*\s*FILE:\s*(\S+)\s*\*/|//\s*FILE:\s*(\S+)', answer, re.I)
+            
+            # Pattern 2: Standard code blocks
+            code_blocks = re.findall(r'```(?:html|css|javascript|js|python)?\s*\n(.*?)```', answer, re.S)
+            
+            files_created = []
+            
+            if file_blocks:
+                # Extract files with FILE: markers
+                for match in re.finditer(r'```(?:html|css|javascript|js|python)?\s*\n(?:<!--\s*FILE:\s*(\S+)\s*-->|/\*\s*FILE:\s*(\S+)\s*\*/|//\s*FILE:\s*(\S+))\s*\n(.*?)```', answer, re.S | re.I):
+                    fname = match.group(1) or match.group(2) or match.group(3)
+                    content = match.group(4).strip()
+                    if fname and content:
+                        # Create directory structure
+                        fpath = os.path.join(work_dir, fname)
+                        os.makedirs(os.path.dirname(fpath), exist_ok=True)
+                        with open(fpath, 'w', encoding='utf-8') as f:
+                            f.write(content)
+                        files_created.append({"path": fname, "size": len(content), "kind": "text"})
+            
+            if not files_created and code_blocks:
+                # Fallback: extract standard code blocks
+                html_blocks = [b for b in code_blocks if '<html' in b.lower() or '<!doctype' in b.lower()]
+                css_blocks = [b for b in code_blocks if 'body' in b.lower() and '{' in b and '<' not in b]
+                js_blocks = [b for b in code_blocks if 'function' in b or 'const' in b or '=>' in b]
+                
+                if html_blocks:
+                    with open(os.path.join(work_dir, "index.html"), 'w', encoding='utf-8') as f:
+                        f.write(html_blocks[0].strip())
+                    files_created.append({"path": "index.html", "size": len(html_blocks[0]), "kind": "text"})
+                
+                if css_blocks:
+                    os.makedirs(os.path.join(work_dir, "css"), exist_ok=True)
+                    with open(os.path.join(work_dir, "css", "style.css"), 'w', encoding='utf-8') as f:
+                        f.write(css_blocks[0].strip())
+                    files_created.append({"path": "css/style.css", "size": len(css_blocks[0]), "kind": "text"})
+                
+                if js_blocks:
+                    os.makedirs(os.path.join(work_dir, "js"), exist_ok=True)
+                    with open(os.path.join(work_dir, "js", "app.js"), 'w', encoding='utf-8') as f:
+                        f.write(js_blocks[0].strip())
+                    files_created.append({"path": "js/app.js", "size": len(js_blocks[0]), "kind": "text"})
+            
+            if not files_created:
+                # Last resort: save entire answer
+                fpath = os.path.join(work_dir, "index.html")
+                with open(fpath, 'w', encoding='utf-8') as f:
+                    f.write(answer)
+                files_created.append({"path": "index.html", "size": len(answer), "kind": "text"})
+
+            # 6. Create ZIP archive
+            archive_name = f"superpromt_{uuid.uuid4().hex[:8]}.zip"
+            archive_path = os.path.join(UPLOAD_DIR, archive_name)
+            with zipfile.ZipFile(archive_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+                for root, dirs, fnames in os.walk(work_dir):
+                    dirs[:] = [d for d in dirs if not d.startswith('.')]
+                    for fname in fnames:
+                        fpath = os.path.join(root, fname)
+                        arcname = os.path.relpath(fpath, work_dir)
+                        zf.write(fpath, arcname)
+
+            psq_b = psq_before["psq"] if psq_before else None
+            psq_a = psq_after["psq"] if psq_after else None
+
+            # Record to memory (daily log)
+            tokens_used = r.get("usage", {}).get("total_tokens", 0)
+            memory.record("task", {
+                "task": req.prompt[:200],
+                "domain": domain,
+                "tier": tier,
+                "model": model,
+                "psq": f"{psq_b:.2f} → {psq_a:.2f}" if psq_b and psq_a else None,
+                "steps": 1,
+                "tool_errors": 0,
+                "tool_calls": 0,
+                "tokens": tokens_used,
+                "files": len(files_created),
+            })
+
+            return GenerateResponse(
+                answer=answer,
+                passport={
+                    "домен": domain, "тир": tier, "модель": model,
+                    "PSQ": f"{psq_b:.2f} → {psq_a:.2f}" if psq_b and psq_a else None,
+                    "токены": tokens_used,
+                },
+                journal=f"PSQ: {psq_b} → {psq_a}\nSkills: {', '.join(s['name'] for s in skills)}\nFiles: {len(files_created)}",
+                psq_before=psq_b,
+                psq_after=psq_a,
+                domain=domain,
+                skills_used=[s['name'] for s in skills],
+                files=files_created,
+                archive_url=f"/api/download/{archive_name}",
+            )
+        finally:
+            pass
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Ошибка генерации: {str(e)[:300]}")
+
+@app.get("/api/download/{filename}")
+async def download_archive(filename: str):
+    """Скачать ZIP-архив с результатом генерации."""
+    safe_name = os.path.basename(filename)
+    path = os.path.join(UPLOAD_DIR, safe_name)
+    if not os.path.isfile(path):
+        raise HTTPException(status_code=404, detail="Архив не найден")
+    return FileResponse(path, filename=safe_name, media_type="application/zip")
+
+# --- Memory System (3 уровня памяти) ---
+
+@app.get("/api/memory", response_model=MemoryResponse)
+async def get_memory():
+    """Получить состояние памяти: ядро + дневные события + сессии."""
+    try:
+        # Core memory (persistent)
+        core = memory.load_core()
+        
+        # Daily events (short-term → long-term)
+        events_text = memory.recent_events(days=7, limit_chars=50000)
+        events = []
+        for line in events_text.strip().split("\n"):
+            if line.strip():
+                try:
+                    ev = json.loads(line)
+                    events.append(MemoryEvent(
+                        ts=ev.get("ts", ""),
+                        event=ev.get("event", ""),
+                        task=ev.get("task"),
+                        domain=ev.get("domain"),
+                        psq=ev.get("psq"),
+                        steps=ev.get("steps"),
+                        tokens=ev.get("tokens"),
+                    ))
+                except (json.JSONDecodeError, Exception):
+                    pass
+        
+        # Sessions count
+        try:
+            session_list = memory.recent_events(days=30)
+            sessions_count = len(set(
+                line.split('"event":')[0] for line in session_list.split("\n")
+                if '"event":' in line
+            ))
+        except Exception:
+            sessions_count = 0
+        
+        return MemoryResponse(
+            core=core,
+            core_size=len(core),
+            daily_events=events[-50:],  # последние 50 событий
+            sessions_count=sessions_count,
+            total_events=len(events),
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка чтения памяти: {str(e)[:200]}")
+
+@app.post("/api/distill", response_model=DistillResponse)
+async def distill_memory():
+    """Deep Dream: консолидация дневных логов в ядро памяти."""
+    try:
+        model = settings.judge_model
+        cfg = None
+        try:
+            from superprompt_cli import config as spt_config
+            cfg = spt_config.load()
+        except Exception:
+            pass
+        
+        result = memory.distill(model, cfg=cfg, days=7)
+        
+        if result:
+            core = memory.load_core()
+            return DistillResponse(
+                status="ok",
+                core_size=len(core),
+                message=f"Ядро обновлено ({len(core)} символов). Дневные логи сконсолидированы."
+            )
+        else:
+            return DistillResponse(
+                status="empty",
+                core_size=0,
+                message="Нет событий для дистилляции. Сначала выполните несколько задач."
+            )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка дистилляции: {str(e)[:200]}")
+
+@app.get("/api/memory/core")
+async def get_core_memory():
+    """Получить только ядро памяти (для отладки)."""
+    return {"core": memory.load_core(), "size": len(memory.load_core())}
+
+@app.delete("/api/memory")
+async def clear_memory():
+    """Очистить дневную память (ядро не трогаем)."""
+    try:
+        daily_dir = os.path.join(memory.MEM_DIR, "daily")
+        if os.path.isdir(daily_dir):
+            for f in os.listdir(daily_dir):
+                if f.endswith(".jsonl"):
+                    os.remove(os.path.join(daily_dir, f))
+        return {"status": "ok", "message": "Дневная память очищена"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка: {str(e)[:200]}")
 
 # --- Загрузка файлов (прикрепление к задаче) ---
 UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")

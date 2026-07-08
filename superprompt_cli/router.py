@@ -10,8 +10,12 @@ PM_DIR = os.environ.get("SPT_PROMTMASTER",
 
 DOMAINS = {
     "code": r"код|функци|скрипт|баг|тест|рефактор|api|python|javascript|sql|деплой|"
-            r"code|debug|refactor|implement|compile",
-    "design": r"дизайн|ux|ui|макет|прототип|типографик|цвет|интерфейс|design|figma",
+            r"code|debug|refactor|implement|compile|сайт|сайта|лендинг|лендинга|страниц|"
+            r"вебсайт|web|website|html|css|компонент|frontend|backend|приложен|сервер|"
+            r"дашборд|панел|интерфейс|REST|GraphQL|эндпоинт|портфолио|галерея|"
+            r"магазин|блог|чат|форма|навигация|модалка|слайдер",
+    "design": r"дизайн|ux|ui|макет|прототип|типографик|цвет|интерфейс|design|figma|"
+              r"визуал|красив|стиль|макет|layout|тема|палитра|шрифт",
     "research": r"исследуй|источник|стать[ьяи]|литератур|обзор|найди информац|research|"
                 r"paper|survey|факт|ссылк",
     "data": r"данн|csv|таблиц|датасет|график|статистик|анализ данных|pandas|data",
