@@ -1,0 +1,24 @@
+{
+  "$schema": "kodik-launchpad/submission/v1",
+
+  "email": "YOUR_EMAIL",
+  "telegram": "YOUR_TELEGRAM",
+  "project_title": "SuperPromt PSQ Web",
+  "author_name": "YOUR_NAME",
+
+  "materials": {
+    "marketplace": "Опубликовать из Kodik: Marketplace → Публикация → SuperPromt PSQ Web",
+    "presentation": "https://github.com/Zelo-00/superpromt-launchpad/blob/main/docs/SuperPromt_%D0%A1%D1%82%D0%B0%D1%82%D1%8C%D1%8F.docx",
+    "repository": "https://github.com/Zelo-00/superpromt-launchpad (репозиторий приватный — сделать публичным перед сдачей)",
+    "readme": "https://github.com/Zelo-00/superpromt-launchpad/blob/main/README.md",
+    "demo": "http://193.39.208.35:8000"
+  },
+
+  "notes": "Стек: Python 3.12, FastAPI, Pydantic, Uvicorn, ванильный SPA (HTML/CSS/JS), SQLite, Docker, OpenAI-совместимый шлюз (BYOK).
+
+Подход: детерминированная метрика PSQ (Prompt Specification Quality) оценивает постановку задачи для LLM по 8 критериям CSP-8 ДО траты токенов. Конвейер ИИ-агентов (Router → PSQ-гейт → подбор скиллов → генератор → агент-ревьюер → ремонт-цикл) собирает готовый проект (сайт, игру, лендинг) с живым превью и ZIP-архивом. Результат не зависит от одной модели: gpt-oss-20b (самая дешёвая) стабильно даёт PASS 6/6 благодаря конвейеру.
+
+Ключевой пользовательский сценарий: 1) Вводите расплывчатый промт «сделай сайт кофейни». 2) PSQ показывает низкий балл и рекомендует скиллы. 3) Нажимаете «Собрать архив» → конвейер агентов: Router → PSQ-гейт (0.2 → 0.95) → скиллы → генератор → ревьюер (PASS 6/6). 4) Появляется живое превью готового сайта + кнопка скачать ZIP. 5) Встроенный редактор позволяет править результат прямо в браузере.
+
+Уникальность: PSQ — детерминированная метрика без LLM (бесплатно), конвейер с ремонт-циклом до результата, проверка агентами вместо метрики KSCR, независимость от модели. Разработка веб-слоя — в AI-IDE Kodik."
+}
