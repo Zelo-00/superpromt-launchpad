@@ -28,10 +28,11 @@ class HistoryStorage:
                     flags TEXT
                 )
             """)
-            try:
+            # добавить колонку flags только если её ещё нет (миграция старой БД),
+            # а не пытаться ALTER на каждом старте
+            cols = {r[1] for r in conn.execute("PRAGMA table_info(history)")}
+            if "flags" not in cols:
                 conn.execute("ALTER TABLE history ADD COLUMN flags TEXT")
-            except sqlite3.OperationalError:
-                pass
             conn.commit()
 
     def add_entry(self, prompt: str, psq: float, gaming: float, prescreen: Optional[str], mode: str, flags: Optional[List[Dict[str, Any]]] = None):
@@ -100,7 +101,7 @@ class HistoryStorage:
                             name = f.get("name")
                             if name:
                                 flags_dist[name] = flags_dist.get(name, 0) + 1
-                except:
+                except (ValueError, TypeError, AttributeError):
                     pass
             stats["flags_distribution"] = flags_dist
 

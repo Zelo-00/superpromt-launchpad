@@ -299,6 +299,7 @@
             gap: 1.5rem;
             animation: fadeIn 0.5s ease-out;
         }
+        .results-grid > .card { min-width: 0; }   /* не распирать колонку широким контентом */
         @media (min-width: 850px) {
             .results-grid { grid-template-columns: 1.2fr 1fr; }
         }
@@ -441,10 +442,60 @@
             font-size: 0.8rem;
             color: var(--ash);
             white-space: pre-wrap;
+            word-break: break-word;
+            overflow-wrap: anywhere;
+            max-width: 100%;
             max-height: 120px;
             overflow-y: auto;
             font-family: 'Fira Code', monospace;
         }
+        .skill-card h4 { overflow-wrap: anywhere; padding-right: 5.5rem; }
+
+        /* ── Конвейер ИИ-агентов (сборка) ── */
+        .pipe-steps { display:flex; flex-direction:column; gap:.55rem; margin-top:1rem; }
+        .pipe-step { display:flex; align-items:center; gap:.85rem; padding:.7rem .9rem; border-radius:10px;
+            background:var(--void); border:1px solid var(--line); transition:border-color .25s, background .25s; }
+        .pipe-step .dot { width:22px; height:22px; border-radius:50%; flex:0 0 auto; display:grid;
+            place-items:center; font-size:.72rem; border:2px solid var(--line); color:var(--ash); }
+        .pipe-step .pt { font-size:.9rem; color:var(--parchment); font-weight:600; }
+        .pipe-step .ps { font-size:.78rem; color:var(--ash); margin-left:auto; text-align:right; max-width:55%; }
+        .pipe-step.run { border-color:var(--lava-solid); background:rgba(255,90,60,.06); }
+        .pipe-step.run .dot { border-color:var(--lava-solid); color:var(--lava-solid);
+            animation:pipePulse 1s ease-in-out infinite; }
+        .pipe-step.done .dot { border-color:#4ad07a; background:#4ad07a; color:#08130c; }
+        .pipe-step.done .pt { color:var(--ash); }
+        @keyframes pipePulse { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.18);opacity:.6} }
+        @media (prefers-reduced-motion:reduce){ .pipe-step.run .dot{animation:none} }
+        .preview-frame-wrap { border:1px solid var(--line); border-radius:12px; overflow:hidden;
+            background:#fff; margin-top:.8rem; }
+        #previewFrame { width:100%; height:420px; border:0; display:block; background:#fff; }
+        .build-actions { display:flex; gap:.7rem; margin-top:1rem; flex-wrap:wrap; }
+        .build-actions a { flex:1; }
+        .edit-tabs { display:flex; gap:.4rem; flex-wrap:wrap; margin-bottom:.5rem; }
+        .edit-tabs button { font-size:.75rem; font-family:ui-monospace,monospace; padding:.3rem .6rem;
+            border-radius:7px; border:1px solid var(--line); background:var(--void); color:var(--ash); cursor:pointer; }
+        .edit-tabs button.active { border-color:var(--molten-core); color:var(--parchment); background:rgba(255,90,60,.08); }
+        .edit-area { width:100%; min-height:280px; background:#0c0d10; color:#cfe4f5; border:1px solid var(--line);
+            border-radius:10px; padding:.8rem; font-family:'Fira Code',ui-monospace,monospace; font-size:12.5px;
+            line-height:1.5; resize:vertical; white-space:pre; overflow:auto; }
+        .verdict-badge { font-size:.72rem; font-weight:700; padding:.15rem .55rem; border-radius:6px;
+            vertical-align:middle; }
+        .verdict-badge.PASS { background:rgba(74,208,122,.15); color:#4ad07a; border:1px solid rgba(74,208,122,.4); }
+        .verdict-badge.WARN { background:rgba(245,166,35,.15); color:#f5a623; border:1px solid rgba(245,166,35,.4); }
+        .verdict-badge.FAIL { background:rgba(229,72,77,.15); color:#e5484d; border:1px solid rgba(229,72,77,.4); }
+        .verify-summary { font-size:.9rem; color:var(--parchment); margin:.7rem 0 1rem; line-height:1.5; }
+        .verify-checks { display:flex; flex-direction:column; gap:.4rem; }
+        .verify-check { display:flex; align-items:center; gap:.6rem; font-size:.82rem; color:var(--ash); }
+        .verify-check .ck { flex:0 0 auto; font-weight:700; }
+        .verify-check .ck.ok { color:#4ad07a; } .verify-check .ck.no { color:#e5484d; }
+        .verify-issues { margin-top:.9rem; }
+        .verify-issues .issue { font-size:.8rem; color:#f5a623; padding:.3rem 0; border-top:1px solid var(--line); }
+        .build-files { margin-top:1rem; display:flex; flex-wrap:wrap; gap:.4rem; }
+        .build-files .fchip { font-size:.75rem; font-family:'Fira Code',monospace; color:var(--ash);
+            background:var(--void); border:1px solid var(--line); border-radius:7px; padding:.25rem .55rem; }
+        .passport-inline { margin-top:1rem; font-size:.8rem; color:var(--ash); line-height:1.7;
+            border-top:1px solid var(--line); padding-top:.8rem; }
+        .passport-inline b { color:var(--parchment); }
 
         .copy-btn {
             position: absolute;
@@ -770,7 +821,9 @@
             margin-bottom: 1rem;
             cursor: pointer;
         }
+        html, body { overflow-x: hidden; }   /* страховка: ховер-сдвиги не дают горизонт. скролл */
         .history-list {
+            overflow-x: hidden;
             display: flex;
             flex-direction: column;
             gap: 0.75rem;
@@ -810,11 +863,15 @@
         }
         .history-score {
             font-weight: 800;
-            font-size: 1.1rem;
-            padding: 0.25rem 0.5rem;
-            border-radius: 6px;
-            min-width: 50px;
-            text-align: center;
+            font-size: 1rem;
+            line-height: 1;
+            padding: 0.4rem 0.6rem;
+            border-radius: 8px;
+            min-width: 56px;
+            flex: 0 0 auto;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
             font-family: ui-monospace, "SF Mono", monospace;
             font-variant-numeric: tabular-nums;
         }
@@ -1401,7 +1458,7 @@
                             <span data-i18n="attachBtn">Прикрепить файлы</span>
                         </button>
                         <span class="attach-hint" data-i18n="attachHint" style="margin:0;">изображения и документы — учтём в задаче</span>
-                        <button id="evalBtn" class="btn-primary" title="Оценить задачу">
+                        <button id="evalBtn" class="btn-primary" title="Собрать архив">
                             <span class="spinner"></span>
                             <span class="btn-text"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="13 6 19 12 13 18"/></svg></span>
                         </button>
@@ -1414,6 +1471,58 @@
                         <span class="spinner"></span>
                         <span class="btn-text" data-i18n="repairBtn">Улучшить промт</span>
                     </button>
+                    <button id="genBtn" class="btn-primary" style="width:auto;padding:0 1.4rem;border-radius:12px;gap:.5rem">
+                        <span class="spinner"></span>
+                        <span class="btn-text" style="display:inline-flex;align-items:center;gap:.5rem">
+                            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                            <span data-i18n="genBtn">Проверить промт</span></span>
+                    </button>
+                </div>
+                <p class="tokens-hint" style="text-align:center;font-size:11px;color:var(--ash);opacity:.85;margin-top:.7rem" data-i18n="genHint">Стрелка — собрать готовый архив конвейером ИИ-агентов. «Проверить промт» — быстрая оценка постановки по метрике PSQ и подбор скиллов.</p>
+            </div>
+
+            <!-- СБОРКА: процесс агентов → превью → проверка → архив -->
+            <div id="buildSection" class="hidden" style="margin-top:2rem">
+                <div class="section-divider"></div>
+                <div class="card">
+                    <span class="eyebrow" data-i18n="agentPipeline">AI Agent Pipeline</span>
+                    <h3><span id="buildIcon"></span> <span data-i18n="buildTitle">Конвейер ИИ-агентов</span></h3>
+                    <div id="pipeSteps" class="pipe-steps"></div>
+                    <div id="buildError" class="hidden" style="color:var(--lava-solid);margin-top:1rem"></div>
+                </div>
+                <div id="buildOutput" class="hidden results-grid" style="margin-top:1.5rem">
+                    <div class="card">
+                        <span class="eyebrow" data-i18n="livePreviewE">Live Preview</span>
+                        <h3><span data-i18n="previewTitle">Готовый результат</span></h3>
+                        <div class="preview-frame-wrap">
+                            <iframe id="previewFrame" title="preview" sandbox="allow-scripts"></iframe>
+                        </div>
+                        <div class="build-actions">
+                            <a id="downloadZip" class="btn-primary" style="text-decoration:none;text-align:center" download>
+                                <span data-i18n="downloadZip">↓ Скачать архив</span></a>
+                            <button id="editToggle" class="btn-secondary" style="flex:1" data-i18n="editBtn">✏️ Редактировать</button>
+                            <a id="openPreview" class="btn-secondary" target="_blank" style="text-decoration:none;text-align:center">
+                                <span data-i18n="openTab">Открыть в новой вкладке</span></a>
+                        </div>
+                        <div id="editor" class="hidden" style="margin-top:1rem">
+                            <div id="editTabs" class="edit-tabs"></div>
+                            <textarea id="editArea" class="edit-area" spellcheck="false"></textarea>
+                            <div class="build-actions">
+                                <button id="editSave" class="btn-primary" style="flex:1" data-i18n="editSave">💾 Сохранить и обновить превью</button>
+                                <button id="editCancel" class="btn-secondary" data-i18n="editCancel">Отмена</button>
+                            </div>
+                            <p class="tokens-hint" id="editMsg" style="text-align:center;margin-top:.5rem"></p>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <span class="eyebrow" data-i18n="agentCheck">Agent Review</span>
+                        <h3><span id="verdictBadge" class="verdict-badge"></span> <span data-i18n="verifyTitle">Проверка агентами</span></h3>
+                        <div id="verifySummary" class="verify-summary"></div>
+                        <div id="verifyChecks" class="verify-checks"></div>
+                        <div id="verifyIssues" class="verify-issues"></div>
+                        <div id="buildFiles" class="build-files"></div>
+                        <div id="buildPassport" class="passport-inline"></div>
+                    </div>
                 </div>
             </div>
 
@@ -1785,6 +1894,19 @@
                 promptPlaceholder: "Введите вашу задачу здесь...",
                 evalBtn: "Оценить задачу",
                 repairBtn: "Улучшить промт",
+                genBtn: "Проверить промт",
+                genHint: "Конвейер ИИ-агентов соберёт готовый проект (сайт, игру, что угодно) и проверит код агентами. Архив — одним файлом.",
+                agentPipeline: "Конвейер ИИ-агентов",
+                buildTitle: "Конвейер ИИ-агентов",
+                livePreviewE: "Живое превью",
+                previewTitle: "Готовый результат",
+                downloadZip: "↓ Скачать архив",
+                openTab: "Открыть в новой вкладке",
+                agentCheck: "Проверка агентами",
+                verifyTitle: "Проверка агентами",
+                editBtn: "✏️ Редактировать",
+                editSave: "💾 Сохранить и обновить превью",
+                editCancel: "Отмена",
                 improvedVariant: "Улучшенный вариант",
                 applyRepair: "Подставить в поле",
                 copy: "Копировать",
@@ -1860,6 +1982,19 @@
                 promptPlaceholder: "Enter your task here...",
                 evalBtn: "Evaluate Task",
                 repairBtn: "Improve Prompt",
+                genBtn: "Check prompt",
+                genHint: "An AI-agent pipeline builds a ready project (site, game, anything) and reviews the code with agents. One-file archive.",
+                agentPipeline: "AI Agent Pipeline",
+                buildTitle: "AI Agent Pipeline",
+                livePreviewE: "Live Preview",
+                previewTitle: "Ready result",
+                downloadZip: "↓ Download archive",
+                openTab: "Open in new tab",
+                agentCheck: "Agent Review",
+                verifyTitle: "Agent Review",
+                editBtn: "✏️ Edit",
+                editSave: "💾 Save & refresh preview",
+                editCancel: "Cancel",
                 improvedVariant: "Improved Variant",
                 applyRepair: "Apply to field",
                 copy: "Copy",
@@ -2552,6 +2687,10 @@
         }
         function startWelcomeDemo() {
             el('welcomeDemo').classList.remove('hidden');
+            // клик по тёмному фону (вне карточки) закрывает демо — первый посетитель не застревает
+            el('welcomeDemo').addEventListener('click', (e) => {
+                if (e.target === el('welcomeDemo')) closeWelcomeDemo();
+            }, { once: false });
             const t = I18N[currentLang];
             const text = t.wdDemoPrompt;
             const steps = t.wdSteps;
@@ -2654,7 +2793,7 @@
                 const r = await fetch(`/api/history/${id}`);
                 const data = await r.json();
                 el('promptInput').value = data.prompt;
-                el('evalBtn').click();
+                runEval(el('genBtn'));   // история оценок — перезапуск ПРОВЕРКИ промта, не сборки
             } catch (e) { console.error(e); }
         }
 
@@ -2879,12 +3018,13 @@
         });
         el('promptInput').addEventListener('input', updateLiveGauge);
         
-        el('evalBtn').addEventListener('click', async () => {
+        // ПРОВЕРКА ПРОМТА (PSQ + скиллы). btn — кнопка, на которой показываем загрузку.
+        async function runEval(btn) {
             const prompt = el('promptInput').value.trim();
             if (!prompt) return;
 
-            el('evalBtn').classList.add('loading');
-            el('evalBtn').disabled = true;
+            btn.classList.add('loading');
+            btn.disabled = true;
             el('results').classList.add('hidden');
             el('error').classList.add('hidden');
             el('banner503').classList.add('hidden');
@@ -2895,39 +3035,80 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ prompt })
                 });
-                
+
                 if (psqRes.status === 503) {
                     el('banner503').classList.remove('hidden');
-                    return; // Прекращаем рендеринг результата при 503
+                    return;
                 }
-
                 if (!psqRes.ok) {
                     let msg = 'Ошибка сервера';
-                    try {
-                        const err = await psqRes.json();
-                        msg = err.detail || msg;
-                    } catch(e) {}
+                    try { const err = await psqRes.json(); msg = err.detail || msg; } catch(e) {}
                     throw new Error(msg);
                 }
 
                 const psqData = await psqRes.json();
-                
-                // Запрашиваем скиллы только если PSQ успешен
                 const skillsRes = await fetch(`/api/skills?task=${encodeURIComponent(prompt)}`);
                 const skillsData = await skillsRes.json();
 
                 renderPSQ(psqData);
                 renderSkills(skillsData);
                 el('results').classList.remove('hidden');
+                el('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
                 loadHistory();
                 loadStats();
             } catch (err) {
                 el('error').textContent = `Ошибка: ${err.message}`;
                 el('error').classList.remove('hidden');
             } finally {
-                el('evalBtn').classList.remove('loading');
-                el('evalBtn').disabled = false;
+                btn.classList.remove('loading');
+                btn.disabled = false;
             }
+        }
+
+        // Кнопка-стрелка → СОБРАТЬ АРХИВ (полный конвейер); «Проверить промт» → PSQ-проверка.
+        el('evalBtn').addEventListener('click', runBuild);
+        el('genBtn').addEventListener('click', () => runEval(el('genBtn')));
+
+        // ── Редактор результата: правка html/css/js + обновление превью и архива ──
+        function renderEditTabs() {
+            el('editTabs').innerHTML = _editFiles.map((f, i) =>
+                `<button class="${i === _editIdx ? 'active' : ''}" data-ei="${i}">${f.path}</button>`).join('');
+            el('editArea').value = _editFiles[_editIdx] ? _editFiles[_editIdx].content : '';
+        }
+        el('editToggle').addEventListener('click', async () => {
+            if (!_genId) return;
+            if (!el('editor').classList.contains('hidden')) { el('editor').classList.add('hidden'); return; }
+            el('editMsg').textContent = 'загрузка файлов…';
+            el('editor').classList.remove('hidden');
+            try {
+                const r = await fetch('/api/edit/' + _genId); const d = await r.json();
+                _editFiles = d.files || []; _editIdx = 0; renderEditTabs(); el('editMsg').textContent = '';
+            } catch (e) { el('editMsg').textContent = 'не удалось загрузить файлы'; }
+        });
+        el('editTabs').addEventListener('click', (e) => {
+            const btn = e.target.closest('button[data-ei]'); if (!btn) return;
+            _editFiles[_editIdx].content = el('editArea').value;   // сохранить текущие правки в памяти
+            _editIdx = +btn.dataset.ei; renderEditTabs();
+        });
+        el('editCancel').addEventListener('click', () => el('editor').classList.add('hidden'));
+        el('editSave').addEventListener('click', async () => {
+            if (!_genId) return;
+            _editFiles[_editIdx].content = el('editArea').value;
+            const payload = {}; _editFiles.forEach(f => payload[f.path] = f.content);
+            el('editSave').classList.add('loading'); el('editSave').disabled = true;
+            el('editMsg').textContent = 'сохранение…';
+            try {
+                const r = await fetch('/api/edit/' + _genId, {method:'POST', headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({files: payload})});
+                const d = await r.json();
+                if (d.ok) {
+                    // перезагрузить превью (cache-bust) и обновить ссылку на архив
+                    el('previewFrame').src = '/api/preview/' + _genId + '/index.html?t=' + Date.now();
+                    if (d.archive_url) el('downloadZip').href = d.archive_url;
+                    el('editMsg').textContent = '✓ сохранено, превью обновлено (' + (d.saved||0) + ' файлов)';
+                } else el('editMsg').textContent = 'ошибка сохранения';
+            } catch (e) { el('editMsg').textContent = 'ошибка сети при сохранении'; }
+            finally { el('editSave').classList.remove('loading'); el('editSave').disabled = false; }
         });
 
         el('repairBtn').addEventListener('click', async () => {
@@ -3150,14 +3331,152 @@ Generated by SuperPromt`;
         };
 
 
+        function cleanPreview(s) {
+            // чистое превью карточки: описание из frontmatter, иначе тело; в любом случае —
+            // без markdown-заголовков, строк-источников и голых URL (они переполняют карточку)
+            let t = (s.desc && s.desc.trim()) ? s.desc : (s.text || '');
+            return t
+                .replace(/^#.*$/gm, '')                 // markdown-заголовки
+                .replace(/^Источник:.*$/gmi, '')        // строки-источники
+                .replace(/\(https?:\/\/[^)]+\)/g, '')   // URL в скобках
+                .replace(/https?:\/\/\S+/g, '')         // голые URL
+                .replace(/\s{2,}/g, ' ')
+                .replace(/\n{2,}/g, '\n').trim();
+        }
+        let _lastSkills = [];
         function renderSkills(data) {
-            el('skillsList').innerHTML = data.skills.map(s => `
+            _lastSkills = data.skills || [];
+            // НЕ вшиваем текст скилла в onclick-атрибут (у него бывают бэктики/кавычки/${} —
+            // это рвало HTML и текст протекал поверх карточки). Экранируем превью и копируем по индексу.
+            el('skillsList').innerHTML = _lastSkills.map((s, i) => {
+                const prev = cleanPreview(s);
+                const cut = prev.substring(0, 240) + (prev.length > 240 ? '…' : '');
+                return `
                 <div class="skill-card">
-                    <h4>${s.name}</h4>
-                    <pre>${s.text.substring(0, 250)}${s.text.length > 250 ? '...' : ''}</pre>
-                    <button class="copy-btn" onclick="copyText(this, \`${s.text.replace(/`/g, '\\`').replace(/\$/g, '\\\$')}\`)">Копировать</button>
-                </div>
-            `).join('');
+                    <h4>${esc(s.name)}</h4>
+                    <pre>${esc(cut)}</pre>
+                    <button class="copy-btn" data-skill-i="${i}">Копировать</button>
+                </div>`;
+            }).join('');
+        }
+        // делегированное копирование полного текста скилла по индексу
+        el('skillsList').addEventListener('click', (e) => {
+            const btn = e.target.closest('.copy-btn'); if (!btn) return;
+            const s = _lastSkills[+btn.dataset.skillI]; if (!s) return;
+            copyText(btn, s.text || '');
+        });
+
+        // ── СБОРКА: конвейер ИИ-агентов (PSQ → скиллы → генератор → ревьюер) ──
+        // метки берём из I18N по текущему языку: по умолчанию русский, англ. — при переключении
+        const PIPE_META = { ru: {
+            router:['Агент-роутер','классифицирует домен, собирает команду'],
+            psq:['PSQ-гейт','оценка и доводка промта'],
+            skills:['Подбор скиллов','релевантные навыки для агентов'],
+            build:['Агент-генератор','пишет проект со скиллами'],
+            review:['Агент-ревьюер','проверяет код и результат'],
+        }, en: {
+            router:['Router agent','classifies domain, assembles the team'],
+            psq:['PSQ gate','scores and refines the prompt'],
+            skills:['Skill selection','relevant skills for agents'],
+            build:['Generator agent','writes the project with skills'],
+            review:['Reviewer agent','checks the code and result'],
+        }};
+        function pipeLabels() { return PIPE_META[currentLang] || PIPE_META.ru; }
+        const PIPE = ['router','psq','skills','build','review'].map(id => ({ id }));
+        function renderPipe(active, done, meta) {
+            const L = pipeLabels();
+            el('pipeSteps').innerHTML = PIPE.map((p, i) => {
+                const st = done.includes(p.id) ? 'done' : (active === p.id ? 'run' : '');
+                const mark = done.includes(p.id) ? '✓' : (i + 1);
+                return `<div class="pipe-step ${st}"><span class="dot">${mark}</span>
+                    <span class="pt">${L[p.id][0]}</span><span class="ps">${(meta && meta[p.id]) || L[p.id][1]}</span></div>`;
+            }).join('');
+        }
+        let _pipeTimer = null;
+        function animatePipe(done, meta) {
+            // прокручиваем «работающие» стадии, пока ждём синхронный /api/generate
+            const pending = PIPE.map(p => p.id).filter(id => !done.includes(id));
+            let i = 0;
+            renderPipe(pending[0], done, meta);
+            clearInterval(_pipeTimer);
+            _pipeTimer = setInterval(() => {
+                i = (i + 1) % pending.length;
+                renderPipe(pending[i], done, meta);
+            }, 2200);
+        }
+        async function runBuild() {
+            const prompt = el('promptInput').value.trim();
+            if (!prompt) { el('promptInput').focus(); return; }
+            el('evalBtn').classList.add('loading'); el('evalBtn').disabled = true;
+            el('buildSection').classList.remove('hidden');
+            el('buildOutput').classList.add('hidden');
+            el('buildError').classList.add('hidden');
+            el('buildSection').scrollIntoView({ behavior:'smooth', block:'start' });
+            animatePipe([], {});
+            try {
+                const res = await fetch('/api/generate', {
+                    method:'POST', headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({ prompt, tier:'min' })
+                });
+                clearInterval(_pipeTimer);
+                if (!res.ok) {
+                    let msg = 'Ошибка сборки';
+                    try { const e = await res.json(); msg = e.detail || msg; } catch(e){}
+                    throw new Error(msg);
+                }
+                const d = await res.json();
+                const meta = {
+                    router: d.domain || '—',
+                    psq: (d.psq_before!=null && d.psq_after!=null) ? `${d.psq_before.toFixed(2)} → ${d.psq_after.toFixed(2)}` : '—',
+                    skills: (d.skills_used||[]).slice(0,3).join(', '),
+                    build: `${(d.files||[]).length} файлов`,
+                    review: d.verification ? `${d.verification.verdict} · ${d.verification.passed}/${d.verification.total} проверок` : '—',
+                };
+                renderPipe(null, PIPE.map(p=>p.id), meta);
+                renderBuild(d);
+            } catch (err) {
+                clearInterval(_pipeTimer);
+                el('buildError').textContent = 'Ошибка: ' + err.message;
+                el('buildError').classList.remove('hidden');
+            } finally {
+                el('evalBtn').classList.remove('loading'); el('evalBtn').disabled = false;
+                loadHistory(); loadStats();
+            }
+        }
+        let _genId = null, _editFiles = [], _editIdx = 0;
+        function renderBuild(d) {
+            el('buildOutput').classList.remove('hidden');
+            // gen_id из preview_url (/api/preview/<id>/index.html) — для редактора
+            _genId = d.preview_url ? d.preview_url.split('/')[3] : null;
+            el('editToggle').style.display = _genId ? '' : 'none';
+            el('editor').classList.add('hidden');
+            if (d.preview_url) {
+                el('previewFrame').src = d.preview_url;
+                el('openPreview').href = d.preview_url;
+                el('openPreview').style.display = '';
+            } else {
+                el('previewFrame').removeAttribute('src');
+                el('openPreview').style.display = 'none';
+            }
+            el('downloadZip').href = d.archive_url || '#';
+            const v = d.verification || { verdict:'—', checks:[], issues:[], review:'' };
+            const badge = el('verdictBadge');
+            badge.textContent = v.verdict; badge.className = 'verdict-badge ' + v.verdict;
+            const cyc = v.cycles ? ` · ${currentLang==='ru'?'проходов':'passes'}: ${v.cycles}` : '';
+            el('verifySummary').textContent = (v.review || '') + (v.review ? cyc : cyc.replace(/^ · /,''));
+            // ВСЁ, что пришло от LLM (issues, имена файлов, паспорт), экранируем через esc() —
+            // иначе крафт промта → HTML/скрипт в innerHTML → XSS (находка ревью).
+            el('verifyChecks').innerHTML = (v.checks||[]).map(c =>
+                `<div class="verify-check"><span class="ck ${c.ok?'ok':'no'}">${c.ok?'✓':'✕'}</span>
+                 <span>${esc(c.name)}${c.note?` — <span style="opacity:.7">${esc(c.note)}</span>`:''}</span></div>`).join('');
+            el('verifyIssues').innerHTML = (v.issues&&v.issues.length)
+                ? '<div style="font-size:.8rem;color:var(--ash);margin-bottom:.3rem">Замечания ревьюера:</div>' +
+                  v.issues.map(x => `<div class="issue">• ${esc(x)}</div>`).join('') : '';
+            el('buildFiles').innerHTML = (d.files||[]).map(f =>
+                `<span class="fchip">${esc(f.path)} · ${esc(String(f.size))}b</span>`).join('');
+            const p = d.passport || {};
+            el('buildPassport').innerHTML = `домен <b>${esc(p['домен']||d.domain||'—')}</b> · тир <b>${esc(p['тир']||'—')}</b>
+                · PSQ <b>${esc(p['PSQ']||'—')}</b> · токенов <b>${esc(String(p['токены']||0))}</b> · модель <b>${esc(p['модель']||'')}</b>`;
         }
 
         async function copyText(btn, text) {

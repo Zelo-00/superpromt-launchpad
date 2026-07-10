@@ -1,3 +1,4 @@
+import asyncio
 import os
 import sys
 import time
@@ -24,6 +25,7 @@ sys.path.insert(0, root_path)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # каталог бэкенда — для локальных модулей (storage)
 
 import superprompt_cli.psq as psq
+import superprompt_cli.psq_with_skills as psq_skills
 import superprompt_cli.router as router
 import superprompt_cli.webskills as webskills
 import superprompt_cli.agentloop as agentloop
@@ -35,9 +37,11 @@ from storage import HistoryStorage
 class Settings(BaseSettings):
     app_name: str = "SuperPromt API"
     debug: bool = False
-    # Формат ядра: "провайдер/модель" (см. superprompt_cli/providers.py)
-    judge_model: str = "openai/gpt-4o"
-    repair_model: str = "openai/gpt-4o"
+    # Формат ядра: "провайдер/модель" (см. superprompt_cli/providers.py).
+    # Дефолты — доступные на шлюзе модели (gpt-4o на этом шлюзе нет → пустой ответ у repair).
+    # Переопределяются env JUDGE_MODEL / REPAIR_MODEL.
+    judge_model: str = "openai/grok-4.1-fast-non-reasoning"
+    repair_model: str = "openai/grok-4.1-fast-non-reasoning"
     db_path: str = "history.db"
     rate_limit_requests: int = 60
     rate_limit_window: int = 60
@@ -67,15 +71,20 @@ async def rate_limit_middleware(request: Request, call_next):
         # Очищаем старые метки
         while client_requests[client_ip] and client_requests[client_ip][0] < window_start:
             client_requests[client_ip].popleft()
-            
+
         if len(client_requests[client_ip]) >= settings.rate_limit_requests:
             return JSONResponse(
                 status_code=429,
                 content={"detail": "Too many requests. Please try again later."}
             )
-        
+
         client_requests[client_ip].append(now)
-        
+        # анти-утечка: периодически выметаем IP, у которых окно опустело (иначе dict растёт вечно)
+        if len(client_requests) > 1000:
+            for ip in [k for k, dq in client_requests.items()
+                       if not dq or dq[-1] < window_start]:
+                client_requests.pop(ip, None)
+
     return await call_next(request)
 
 # --- Security Headers ---
@@ -83,15 +92,22 @@ async def rate_limit_middleware(request: Request, call_next):
 async def add_security_headers(request: Request, call_next):
     response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
-    response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "no-referrer"
-    # CSP: разрешаем инлайновые скрипты/стили для совместимости с фронтом
-    response.headers["Content-Security-Policy"] = (
-        "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline'; "
-        "style-src 'self' 'unsafe-inline'; "
-        "img-src 'self' data:;"
-    )
+    # Превью сгенерированного проекта грузится в НАШ same-origin iframe — DENY его ломает
+    # (находка ревью). SAMEORIGIN разрешает фрейминг только своим origin. Остальное — DENY.
+    if request.url.path.startswith("/api/preview/"):
+        response.headers["X-Frame-Options"] = "SAMEORIGIN"
+        # у превью своя CSP не навязывается — это чужой (сгенерированный) документ
+    else:
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; "
+            "frame-src 'self'; "                    # разрешить свой preview-iframe
+            "frame-ancestors 'self';"               # современный аналог X-Frame-Options
+        )
     return response
 
 # --- CORS ---
@@ -114,6 +130,16 @@ frontend_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../fron
 # --- Models ---
 
 MAX_PROMPT_LENGTH = 5000
+GEN_MAX_TOKENS = 24000           # лимит токенов генерации кода (против обрыва)
+REVIEW_MAX_TOKENS = 500          # лимит токенов агента-ревьюера
+MAX_BUILD_CYCLES = 3             # ремонт-цикл: максимум проходов до PASS
+PREVIEW_TTL_SEC = 6 * 3600       # сколько живут served-превью до сборки мусора
+LLM_ENV_KEYS = ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GOOGLE_API_KEY")
+
+
+def _has_llm() -> bool:
+    """Настроен ли LLM-провайдер (ключ в окружении). Единый источник для всех эндпоинтов."""
+    return any(os.environ.get(k) for k in LLM_ENV_KEYS)
 
 class PSQRequest(BaseModel):
     prompt: str = Field(..., min_length=1, max_length=MAX_PROMPT_LENGTH, description="Сырой текст задачи")
@@ -134,6 +160,7 @@ class PSQResponse(BaseModel):
 class SkillItem(BaseModel):
     name: str
     text: str
+    desc: str = ""      # чистое описание из frontmatter — превью карточки (не сырой markdown)
 
 class SkillsResponse(BaseModel):
     domain: str
@@ -181,6 +208,8 @@ class GenerateResponse(BaseModel):
     skills_used: List[str] = []
     files: List[Dict[str, Any]] = []
     archive_url: Optional[str] = None
+    preview_url: Optional[str] = None    # /api/preview/<id>/index.html — живое превью сайта в iframe
+    verification: Optional[Dict[str, Any]] = None  # агентная проверка кода/результата (вместо KSCR)
 
 class MemoryEvent(BaseModel):
     ts: str
@@ -286,14 +315,15 @@ async def repair_prompt(req: RepairRequest):
         raise HTTPException(status_code=422, detail="Prompt too long")
     try:
         # Проверяем наличие ключа для repair
-        has_llm = any(os.environ.get(k) for k in ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GOOGLE_API_KEY"])
+        has_llm = _has_llm()
         if not has_llm:
             raise HTTPException(
                 status_code=503,
                 detail="Улучшение промта недоступно: LLM-провайдер не настроен."
             )
         
-        res = psq.repair(req.prompt, settings.repair_model)
+        # sync-вызов LLM в поток — не блокировать event loop (находка ревью)
+        res = await asyncio.to_thread(psq.repair, req.prompt, settings.repair_model)
         return {"improved_text": res}
     except HTTPException:
         raise
@@ -311,7 +341,7 @@ async def health():
 async def get_status():
     # Проверяем наличие ключа (упрощенно, так как superprompt_cli сам управляет провайдерами)
     # В реальности мы можем проверить наличие OPENAI_API_KEY или аналогичных переменных
-    has_llm = any(os.environ.get(k) for k in ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GOOGLE_API_KEY"])
+    has_llm = _has_llm()
     return {
         "mode": "deep" if has_llm else "fast",
         "llm_configured": has_llm
@@ -321,7 +351,7 @@ async def get_status():
 async def calculate_psq(req: PSQRequest):
     try:
         # Проверяем режим (для истории)
-        has_llm = any(os.environ.get(k) for k in ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GOOGLE_API_KEY"])
+        has_llm = _has_llm()
         mode = "deep" if has_llm else "fast"
 
         # 1. Детерминированный пре-скрининг (не требует LLM)
@@ -333,9 +363,9 @@ async def calculate_psq(req: PSQRequest):
             storage.add_entry(req.prompt, res["psq"], res["gaming"], res["prescreen"], mode, res["flags"])
             return res
 
-        # 2. Если пре-скрининг не дал результата, нужен судья
+        # 2. Если пре-скрининг не дал результата, нужен судья (LLM → в поток)
         try:
-            res = psq.score(req.prompt, settings.judge_model)
+            res = await asyncio.to_thread(psq.score, req.prompt, settings.judge_model)
             # Преобразуем флаги
             res["flags"] = [{"name": f[0], "count": f[1]} for f in res["flags"]]
             storage.add_entry(req.prompt, res["psq"], res["gaming"], res.get("prescreen"), mode, res["flags"])
@@ -382,46 +412,225 @@ async def get_skills(task: str):
     try:
         domain, confidence, _ = router.classify_conf(task)
         
-        # LLM-based ranking with fallback to TF-IDF
+        # LLM-based ranking with fallback to TF-IDF (LLM-путь → в поток, не блокировать loop)
         try:
             from superprompt_cli import config as spt_config
             cfg = spt_config.load()
-            skills_data = webskills.rank(task, k=10, model=settings.judge_model, cfg=cfg)
+            skills_data = await asyncio.to_thread(webskills.rank, task, 10, settings.judge_model, cfg)
         except Exception:
-            skills_data = webskills.rank(task, k=10)
+            skills_data = await asyncio.to_thread(webskills.rank, task, 10)
         
         # Добавляем lean-code если нужно, как это делает router.pick_skills
         skills = []
         if domain in ("code", "mixed"):
-            skills.append(SkillItem(name="lean-code(builtin)", text=router.PONYTAIL_RULES))
-        
+            skills.append(SkillItem(name="lean-code(builtin)", text=router.PONYTAIL_RULES,
+                                    desc="Дисциплина минимального кода: YAGNI, переиспользование, "
+                                         "root-cause багфиксов, один запускаемый чек."))
+
         for s in skills_data:
-            skills.append(SkillItem(name=s["name"], text=s["text"]))
+            skills.append(SkillItem(name=s["name"], text=s["text"], desc=s.get("desc", "")))
             
         return {
             "domain": domain,
             "confidence": confidence,
-            "skills": skills[:4]
+            # политика владельца: минимум 5 скиллов на задачу, по нисходящей релевантности
+            # (+builtin lean-code для code/mixed сверх лимита)
+            "skills": skills[:7]
         }
     except Exception:
         raise HTTPException(status_code=500, detail="Внутренняя ошибка при подборе скиллов.")
 
+def _verify_result(work_dir, files_created, prompt, model, cfg):
+    """АГЕНТНАЯ ПРОВЕРКА результата (вместо метрики KSCR): детерминированные чеки кода +
+    LLM-агент-ревьюер. -> {verdict, checks:[{name,ok,note}], review, issues:[...]}."""
+    import re
+    checks = []
+
+    def chk(name, ok, note=""):
+        checks.append({"name": name, "ok": bool(ok), "note": note})
+
+    idx = os.path.join(work_dir, "index.html")
+    html = ""
+    if os.path.isfile(idx):
+        html = open(idx, encoding="utf-8", errors="replace").read()
+    chk("index.html присутствует", os.path.isfile(idx), "точка входа проекта")
+    chk("валидный HTML-каркас", "<!doctype" in html.lower() and "<html" in html.lower()
+        and "</html>" in html.lower(), "doctype + html + закрытие")
+    chk("есть <title>", "<title>" in html.lower(), "заголовок вкладки")
+    # ссылки на локальные css/js разрешаются в созданные файлы
+    made = {f["path"].replace("\\", "/") for f in files_created}
+    refs = re.findall(r'(?:href|src)="([^"]+)"', html, re.I)
+    local = [r for r in refs if not r.startswith(("http", "//", "#", "data:", "mailto:"))]
+    broken = [r for r in local if r.lstrip("./") not in made
+              and os.path.normpath(r) not in {os.path.normpath(m) for m in made}]
+    chk("локальные ссылки разрешаются", not broken,
+        ("битые: " + ", ".join(broken[:3])) if broken else "css/js/картинки на месте")
+    chk("нет пустых файлов", all(f["size"] > 0 for f in files_created), "у всех файлов есть содержимое")
+    non_ascii_ok = True
+    chk("несколько файлов (html+css/js)", len(made) >= 2, "проект разложен по файлам")
+
+    det_ok = sum(1 for c in checks if c["ok"])
+    review, issues, verdict = "", [], "PASS"
+    # LLM-агент-ревьюер: смотрит реальный код и соответствие запросу
+    try:
+        code_snip = ""
+        for f in files_created:
+            p = os.path.join(work_dir, f["path"])
+            if os.path.isfile(p) and f["path"].rsplit(".", 1)[-1] in ("html", "css", "js"):
+                code_snip += f"\n===== {f['path']} =====\n" + \
+                    open(p, encoding="utf-8", errors="replace").read()[:4000]
+        rev_prompt = (
+            "Ты — придирчивый ревьюер-агент. Проверь, что сгенерированный проект РЕАЛЬНО "
+            "выполняет запрос пользователя и не содержит грубых дефектов.\n\n"
+            f"ЗАПРОС ПОЛЬЗОВАТЕЛЯ:\n{prompt}\n\nКОД ПРОЕКТА:\n{code_snip[:12000]}\n\n"
+            "Верни СТРОГО JSON: {\"verdict\":\"PASS\"|\"WARN\"|\"FAIL\", "
+            "\"issues\":[\"кратко дефект 1\", ...], \"summary\":\"одно предложение\"}. "
+            "PASS — запрос выполнен, критичных дефектов нет. WARN — работает, но есть недочёты. "
+            "FAIL — запрос не выполнен или код нерабочий. Не выдумывай — суди по коду.")
+        r = providers.chat(model, [{"role": "user", "content": rev_prompt}],
+                           max_tokens=REVIEW_MAX_TOKENS, temperature=0.0, cfg=cfg, timeout=60)
+        m = re.search(r'\{.*\}', r["text"], re.S)
+        if m:
+            data = json.loads(m.group(0))
+            verdict = data.get("verdict", "PASS") if data.get("verdict") in ("PASS", "WARN", "FAIL") else "PASS"
+            issues = [str(x)[:200] for x in (data.get("issues") or [])][:6]
+            review = str(data.get("summary", ""))[:400]
+    except Exception:  # noqa: BLE001 — ревьюер опционален, детерминированные чеки уже есть
+        review = "агент-ревьюер недоступен — вердикт по детерминированным проверкам"
+    # финальный вердикт: детерминированные провалы жёстче мнения агента
+    if det_ok < len(checks) - 1 or broken:
+        verdict = "FAIL" if verdict == "PASS" else verdict
+    return {"verdict": verdict, "checks": checks, "review": review, "issues": issues,
+            "passed": det_ok, "total": len(checks)}
+
+
+def _answer_to_files(answer, work_dir):
+    """Разложить ответ LLM (блоки кода) в файлы проекта в work_dir: FILE-маркеры → стандартные
+    блоки → last-resort; авто-сплит инлайн CSS/JS из index.html; гарантия <link>/<script src>;
+    дедуп по пути. -> files_created:[{path,size,kind}]. Чистая функция для repair-цикла."""
+    import re
+    file_blocks = re.findall(r'```(?:html|css|javascript|js|python)?\s*\n<!--\s*FILE:\s*(\S+)\s*-->|/\*\s*FILE:\s*(\S+)\s*\*/|//\s*FILE:\s*(\S+)', answer, re.I)
+    code_blocks = re.findall(r'```(?:html|css|javascript|js|python)?\s*\n(.*?)```', answer, re.S)
+    files_created = []
+    if file_blocks:
+        for match in re.finditer(r'```(?:html|css|javascript|js|python)?\s*\n(?:<!--\s*FILE:\s*(\S+)\s*-->|/\*\s*FILE:\s*(\S+)\s*\*/|//\s*FILE:\s*(\S+))\s*\n(.*?)```', answer, re.S | re.I):
+            fname = match.group(1) or match.group(2) or match.group(3)
+            content = match.group(4).strip()
+            if fname and content:
+                fpath = os.path.join(work_dir, fname)
+                os.makedirs(os.path.dirname(fpath), exist_ok=True)
+                with open(fpath, 'w', encoding='utf-8') as f:
+                    f.write(content)
+                files_created.append({"path": fname, "size": len(content), "kind": "text"})
+    if not files_created and code_blocks:
+        html_blocks = [b for b in code_blocks if '<html' in b.lower() or '<!doctype' in b.lower()]
+        css_blocks = [b for b in code_blocks if 'body' in b.lower() and '{' in b and '<' not in b]
+        js_blocks = [b for b in code_blocks if 'function' in b or 'const' in b or '=>' in b]
+        if html_blocks:
+            with open(os.path.join(work_dir, "index.html"), 'w', encoding='utf-8') as f:
+                f.write(html_blocks[0].strip())
+            files_created.append({"path": "index.html", "size": len(html_blocks[0]), "kind": "text"})
+        if css_blocks:
+            os.makedirs(os.path.join(work_dir, "css"), exist_ok=True)
+            with open(os.path.join(work_dir, "css", "style.css"), 'w', encoding='utf-8') as f:
+                f.write(css_blocks[0].strip())
+            files_created.append({"path": "css/style.css", "size": len(css_blocks[0]), "kind": "text"})
+        if js_blocks:
+            os.makedirs(os.path.join(work_dir, "js"), exist_ok=True)
+            with open(os.path.join(work_dir, "js", "app.js"), 'w', encoding='utf-8') as f:
+                f.write(js_blocks[0].strip())
+            files_created.append({"path": "js/app.js", "size": len(js_blocks[0]), "kind": "text"})
+    if not files_created:
+        with open(os.path.join(work_dir, "index.html"), 'w', encoding='utf-8') as f:
+            f.write(answer)
+        files_created.append({"path": "index.html", "size": len(answer), "kind": "text"})
+
+    index_path = os.path.join(work_dir, "index.html")
+    if os.path.exists(index_path):
+        html_content = open(index_path, encoding='utf-8').read()
+        css_matches = re.findall(r'<style[^>]*>(.*?)</style>', html_content, re.S | re.I)
+        if css_matches:
+            css_content = '\n'.join(css_matches)
+            os.makedirs(os.path.join(work_dir, "css"), exist_ok=True)
+            with open(os.path.join(work_dir, "css", "style.css"), 'w', encoding='utf-8') as f:
+                f.write(css_content)
+            files_created.append({"path": "css/style.css", "size": len(css_content), "kind": "text"})
+            html_content = re.sub(r'<style[^>]*>.*?</style>', '<link rel="stylesheet" href="css/style.css">', html_content, flags=re.S | re.I)
+        js_matches = re.findall(r'<script[^>]*>(.*?)</script>', html_content, re.S | re.I)
+        js_matches = [m for m in js_matches if m.strip() and not m.strip().startswith('{')]
+        if js_matches:
+            js_content = '\n'.join(js_matches)
+            os.makedirs(os.path.join(work_dir, "js"), exist_ok=True)
+            with open(os.path.join(work_dir, "js", "app.js"), 'w', encoding='utf-8') as f:
+                f.write(js_content)
+            files_created.append({"path": "js/app.js", "size": len(js_content), "kind": "text"})
+
+            def _strip_inline_script(m):
+                attrs, body = m.group(1) or "", m.group(2) or ""
+                if "src=" in attrs.lower() or body.strip().startswith('{'):
+                    return m.group(0)
+                return ""
+            html_content = re.sub(r'<script([^>]*)>(.*?)</script>', _strip_inline_script,
+                                  html_content, flags=re.S | re.I)
+
+        has_css = os.path.isfile(os.path.join(work_dir, "css", "style.css"))
+        has_js = os.path.isfile(os.path.join(work_dir, "js", "app.js"))
+        if has_css and "css/style.css" not in html_content:
+            link = '<link rel="stylesheet" href="css/style.css">'
+            html_content = html_content.replace("</head>", link + "\n</head>", 1) \
+                if "</head>" in html_content else link + "\n" + html_content
+        if has_js and "js/app.js" not in html_content:
+            tag = '<script src="js/app.js"></script>'
+            html_content = html_content.replace("</body>", tag + "\n</body>", 1) \
+                if "</body>" in html_content else html_content + "\n" + tag
+        with open(index_path, 'w', encoding='utf-8') as f:
+            f.write(html_content)
+        for fc in files_created:
+            if fc['path'] == 'index.html':
+                fc['size'] = len(html_content)
+
+    seen_paths, uniq = set(), []
+    for fc in files_created:
+        if fc['path'] not in seen_paths:
+            seen_paths.add(fc['path'])
+            fp = os.path.join(work_dir, fc['path'])
+            if os.path.isfile(fp):
+                fc['size'] = os.path.getsize(fp)
+            uniq.append(fc)
+    return uniq
+
+
 @app.post("/api/generate", response_model=GenerateResponse)
 async def generate_code(req: GenerateRequest):
-    """Полный pipeline: PSQ → ремонт → скиллы → генерация кода LLM → архив."""
+    """Async-обёртка: тяжёлый синхронный конвейер выносится в поток, чтобы НЕ блокировать
+    event loop на 30–300 с (находка ревью). Параллельные запросы больше не стоят в очереди."""
+    return await asyncio.to_thread(_generate_sync, req)
+
+
+def _generate_sync(req: GenerateRequest):
+    """Полный pipeline: PSQ → скиллы → генерация кода LLM → АГЕНТНАЯ ПРОВЕРКА → (ремонт-цикл до
+    результата) → архив. Веб-версия PSQ: без метрики KSCR — результат проверяют агенты."""
     try:
-        model = req.model or settings.judge_model
+        _gc_previews()                       # сборка мусора старых превью/архивов (анти-утечка диска)
+        # Генерацию ведёт code-специалист qwen3-coder-480b — идеальный для кода, стабильный
+        # PASS 6/6 за 1 цикл (~30с). Дешёвая gpt-oss-20b периодически недоступна на шлюзе (503),
+        # средние qwen3-next-80b/deepseek-v3.2 нестабильны — поэтому дефолт на надёжного кодера.
+        # Конвейер PSQ+скиллы+ревьюер+ремонт-цикл делает результат воспроизводимым на разных
+        # моделях (независимость от модели). Переопределяется req.model или env SPT_GEN_MODEL.
+        model = req.model or os.environ.get("SPT_GEN_MODEL") or "openai/qwen3-coder-480b-a35b-instruct-maas"
         tier = req.tier
         work_dir = tempfile.mkdtemp(prefix="spt_gen_")
 
         try:
-            # 1. Router + skills
+            # 1. Router + skills (LLM-based ranking)
             from superprompt_cli import config as spt_config
             cfg = spt_config.load()
             domain, conf, _ = router.classify_conf(req.prompt)
-            skills = webskills.rank(req.prompt, k=5)
+            
+            # Используем LLM-based ранжирование для выбора скиллов
+            skills = webskills.rank(req.prompt, k=5, model=settings.judge_model, cfg=cfg)
 
-            # 2. PSQ gate (3 cycles to ensure PSQ >= 0.8)
+            # 2. PSQ gate с интеграцией скиллов (3 cycles to ensure PSQ >= 0.8)
             from superprompt_cli import psq as spt_psq
             final_prompt, psq_before, psq_after = spt_psq.gate(
                 req.prompt, settings.judge_model, model,
@@ -462,115 +671,39 @@ const app = {{...}}
 - Для графиков: Chart.js CDN в index.html
 - Минимум 3 файла (html + css + js)
 - Код должен быть ЧИТАЕМЫМ и ПОДДЕРЖИВАЕМЫМ
-- НЕ пиши markdown-описания — только код"""
+- НЕ пиши markdown-описания — только код
 
-            # 4. Generate code via LLM
-            r = providers.chat(model, [
-                {"role": "system", "content": system},
-                {"role": "user", "content": final_prompt}
-            ], max_tokens=16000, temperature=0.3, cfg=cfg, timeout=300)
+ЖЁСТКИЕ ПРАВИЛА КАЧЕСТВА (иначе результат забракует агент-ревьюер):
+- ЗАВЕРШЁННОСТЬ: выдай ПОЛНЫЙ код каждого файла до конца. НЕ обрывай на середине, без «...».
+- РОВНО то, что просили: НЕ добавляй незапрошенные фичи (корзину, лишние модалки, страницы).
+- ЦЕЛОСТНОСТЬ: каждый id/класс, на который ссылается JS или CSS, ДОЛЖЕН существовать в HTML,
+  и наоборот — не ссылайся на несуществующие элементы.
+- СВЯЗНОСТЬ: index.html подключает css/style.css (<link>) и js/app.js (<script src>) — обязательно.
+- Каждая заявленная в задаче секция/форма/кнопка РЕАЛЬНО присутствует и рабочая."""
 
-            answer = r["text"]
-
-            # 5. Extract code blocks from answer
-            import re
-            
-            # Pattern 1: FILE: marker in code blocks
-            file_blocks = re.findall(r'```(?:html|css|javascript|js|python)?\s*\n<!--\s*FILE:\s*(\S+)\s*-->|/\*\s*FILE:\s*(\S+)\s*\*/|//\s*FILE:\s*(\S+)', answer, re.I)
-            
-            # Pattern 2: Standard code blocks
-            code_blocks = re.findall(r'```(?:html|css|javascript|js|python)?\s*\n(.*?)```', answer, re.S)
-            
-            files_created = []
-            
-            if file_blocks:
-                # Extract files with FILE: markers
-                for match in re.finditer(r'```(?:html|css|javascript|js|python)?\s*\n(?:<!--\s*FILE:\s*(\S+)\s*-->|/\*\s*FILE:\s*(\S+)\s*\*/|//\s*FILE:\s*(\S+))\s*\n(.*?)```', answer, re.S | re.I):
-                    fname = match.group(1) or match.group(2) or match.group(3)
-                    content = match.group(4).strip()
-                    if fname and content:
-                        # Create directory structure
-                        fpath = os.path.join(work_dir, fname)
-                        os.makedirs(os.path.dirname(fpath), exist_ok=True)
-                        with open(fpath, 'w', encoding='utf-8') as f:
-                            f.write(content)
-                        files_created.append({"path": fname, "size": len(content), "kind": "text"})
-            
-            if not files_created and code_blocks:
-                # Fallback: extract standard code blocks
-                html_blocks = [b for b in code_blocks if '<html' in b.lower() or '<!doctype' in b.lower()]
-                css_blocks = [b for b in code_blocks if 'body' in b.lower() and '{' in b and '<' not in b]
-                js_blocks = [b for b in code_blocks if 'function' in b or 'const' in b or '=>' in b]
-                
-                if html_blocks:
-                    with open(os.path.join(work_dir, "index.html"), 'w', encoding='utf-8') as f:
-                        f.write(html_blocks[0].strip())
-                    files_created.append({"path": "index.html", "size": len(html_blocks[0]), "kind": "text"})
-                
-                if css_blocks:
-                    os.makedirs(os.path.join(work_dir, "css"), exist_ok=True)
-                    with open(os.path.join(work_dir, "css", "style.css"), 'w', encoding='utf-8') as f:
-                        f.write(css_blocks[0].strip())
-                    files_created.append({"path": "css/style.css", "size": len(css_blocks[0]), "kind": "text"})
-                
-                if js_blocks:
-                    os.makedirs(os.path.join(work_dir, "js"), exist_ok=True)
-                    with open(os.path.join(work_dir, "js", "app.js"), 'w', encoding='utf-8') as f:
-                        f.write(js_blocks[0].strip())
-                    files_created.append({"path": "js/app.js", "size": len(js_blocks[0]), "kind": "text"})
-            
-            if not files_created:
-                # Last resort: save entire answer
-                fpath = os.path.join(work_dir, "index.html")
-                with open(fpath, 'w', encoding='utf-8') as f:
-                    f.write(answer)
-                files_created.append({"path": "index.html", "size": len(answer), "kind": "text"})
-
-            # 5.5 Auto-split: extract inline CSS/JS from index.html
-            index_path = os.path.join(work_dir, "index.html")
-            if os.path.exists(index_path):
-                with open(index_path, 'r', encoding='utf-8') as f:
-                    html_content = f.read()
-                
-                # Extract inline CSS
-                css_matches = re.findall(r'<style[^>]*>(.*?)</style>', html_content, re.S | re.I)
-                if css_matches:
-                    css_content = '\n'.join(css_matches)
-                    css_dir = os.path.join(work_dir, "css")
-                    os.makedirs(css_dir, exist_ok=True)
-                    css_path = os.path.join(css_dir, "style.css")
-                    with open(css_path, 'w', encoding='utf-8') as f:
-                        f.write(css_content)
-                    files_created.append({"path": "css/style.css", "size": len(css_content), "kind": "text"})
-                    
-                    # Replace inline style with link
-                    html_content = re.sub(r'<style[^>]*>.*?</style>', '<link rel="stylesheet" href="css/style.css">', html_content, flags=re.S | re.I)
-                
-                # Extract inline JS
-                js_matches = re.findall(r'<script[^>]*>(.*?)</script>', html_content, re.S | re.I)
-                js_matches = [m for m in js_matches if m.strip() and not m.strip().startswith('{')]
-                if js_matches:
-                    js_content = '\n'.join(js_matches)
-                    js_dir = os.path.join(work_dir, "js")
-                    os.makedirs(js_dir, exist_ok=True)
-                    js_path = os.path.join(js_dir, "app.js")
-                    with open(js_path, 'w', encoding='utf-8') as f:
-                        f.write(js_content)
-                    files_created.append({"path": "js/app.js", "size": len(js_content), "kind": "text"})
-                    
-                    # Replace inline scripts with link (keep CDN scripts)
-                    for js_code in js_matches:
-                        if not js_code.strip().startswith('{'):
-                            html_content = html_content.replace(js_code + '</script>', '', 1)
-                            html_content = re.sub(r'<script>\s*</script>', '', html_content)
-                
-                # Save updated HTML
-                with open(index_path, 'w', encoding='utf-8') as f:
-                    f.write(html_content)
-                # Update size
-                for fc in files_created:
-                    if fc['path'] == 'index.html':
-                        fc['size'] = len(html_content)
+            # 4-6. РЕМОНТ-ЦИКЛ ДО РЕЗУЛЬТАТА: генерация → сборка файлов → агентная проверка.
+            #      FAIL → регенерация с замечаниями ревьюера (планка: до PASS, максимум 3 прохода).
+            base_user = final_prompt
+            build_feedback = ""
+            answer, files_created, verification, tokens_used = "", [], None, 0
+            for _cycle in range(MAX_BUILD_CYCLES):
+                if _cycle > 0:
+                    work_dir = tempfile.mkdtemp(prefix="spt_gen_")   # свежая папка на повтор
+                msgs = [{"role": "system", "content": system},
+                        {"role": "user", "content": base_user}]
+                if build_feedback:
+                    msgs.append({"role": "user", "content":
+                        "Предыдущая версия ЗАБРАКОВАНА агентом-ревьюером. Исправь ВСЕ замечания и "
+                        "верни ПОЛНЫЙ код проекта заново (все файлы целиком):\n" + build_feedback})
+                r = providers.chat(model, msgs, max_tokens=GEN_MAX_TOKENS, temperature=0.3, cfg=cfg, timeout=300)
+                answer = r["text"]
+                tokens_used += (r.get("usage", {}) or {}).get("total_tokens", 0)
+                files_created = _answer_to_files(answer, work_dir)
+                verification = _verify_result(work_dir, files_created, req.prompt, model, cfg)
+                verification["cycles"] = _cycle + 1
+                if verification.get("verdict") == "PASS":
+                    break
+                build_feedback = "; ".join(verification.get("issues") or []) or verification.get("review", "")
 
             # 5.6 Generate launch.bat for Windows
             has_index = any(f['path'] == 'index.html' for f in files_created)
@@ -622,7 +755,8 @@ Generated by SuperPromt Pipeline (PSQ: {psq_before['psq'] if psq_before else '?'
             files_created.append({"path": "README.md", "size": len(readme_content), "kind": "text"})
 
             # 6. Create ZIP archive
-            archive_name = f"superpromt_{uuid.uuid4().hex[:8]}.zip"
+            gen_id = uuid.uuid4().hex[:8]
+            archive_name = f"superpromt_{gen_id}.zip"
             archive_path = os.path.join(UPLOAD_DIR, archive_name)
             with zipfile.ZipFile(archive_path, 'w', zipfile.ZIP_DEFLATED) as zf:
                 for root, dirs, fnames in os.walk(work_dir):
@@ -632,11 +766,18 @@ Generated by SuperPromt Pipeline (PSQ: {psq_before['psq'] if psq_before else '?'
                         arcname = os.path.relpath(fpath, work_dir)
                         zf.write(fpath, arcname)
 
+            # 6.1 Копия файлов в served-каталог для ЖИВОГО ПРЕВЬЮ в iframe (не только скачивание zip)
+            preview_url = None
+            if any(f["path"] == "index.html" for f in files_created):
+                pdir = os.path.join(PREVIEW_DIR, gen_id)
+                shutil.copytree(work_dir, pdir, dirs_exist_ok=True)
+                preview_url = f"/api/preview/{gen_id}/index.html"
+
+            # (агентная проверка уже выполнена в ремонт-цикле выше; verification/tokens_used готовы)
             psq_b = psq_before["psq"] if psq_before else None
             psq_a = psq_after["psq"] if psq_after else None
 
             # Record to memory (daily log)
-            tokens_used = r.get("usage", {}).get("total_tokens", 0)
             memory.record("task", {
                 "task": req.prompt[:200],
                 "domain": domain,
@@ -664,6 +805,8 @@ Generated by SuperPromt Pipeline (PSQ: {psq_before['psq'] if psq_before else '?'
                 skills_used=[s['name'] for s in skills],
                 files=files_created,
                 archive_url=f"/api/download/{archive_name}",
+                preview_url=preview_url,
+                verification=verification,
             )
         finally:
             pass
@@ -681,6 +824,157 @@ async def download_archive(filename: str):
     if not os.path.isfile(path):
         raise HTTPException(status_code=404, detail="Архив не найден")
     return FileResponse(path, filename=safe_name, media_type="application/zip")
+
+@app.get("/api/preview/{gen_id}/{path:path}")
+async def preview_generated(gen_id: str, path: str):
+    """Живое превью сгенерированного проекта в iframe. Отдаёт файлы из preview/<gen_id>/
+    ТОЛЬКО внутри этого каталога (анти path-traversal)."""
+    gen_id = os.path.basename(gen_id)                 # без './..'
+    base = os.path.realpath(os.path.join(PREVIEW_DIR, gen_id))
+    full = os.path.realpath(os.path.join(base, path or "index.html"))
+    if not (full == base or full.startswith(base + os.sep)) or not os.path.isfile(full):
+        raise HTTPException(status_code=404, detail="not_found")
+    resp = FileResponse(full)
+    resp.headers["Cache-Control"] = "no-store"        # правки видны сразу при перезагрузке iframe
+    return resp
+
+
+def _preview_base(gen_id):
+    gen_id = os.path.basename(gen_id or "")
+    base = os.path.realpath(os.path.join(PREVIEW_DIR, gen_id))
+    return gen_id, base
+
+
+@app.get("/api/edit/{gen_id}")
+async def edit_files(gen_id: str):
+    """Вернуть редактируемые текстовые файлы проекта (html/css/js) для правки в UI."""
+    gen_id, base = _preview_base(gen_id)
+    if not os.path.isdir(base):
+        raise HTTPException(status_code=404, detail="not_found")
+    out = []
+    for root, _dirs, fnames in os.walk(base):
+        for fn in sorted(fnames):
+            ext = fn.rsplit(".", 1)[-1].lower()
+            if ext not in ("html", "css", "js"):
+                continue
+            fp = os.path.join(root, fn)
+            rel = os.path.relpath(fp, base).replace(os.sep, "/")
+            try:
+                out.append({"path": rel, "content": open(fp, encoding="utf-8").read()})
+            except OSError:
+                pass
+    out.sort(key=lambda f: (0 if f["path"] == "index.html" else 1, f["path"]))
+    return {"gen_id": gen_id, "files": out}
+
+
+class EditSaveRequest(BaseModel):
+    files: Dict[str, str] = {}       # {относительный_путь: новое_содержимое}
+
+
+@app.post("/api/edit/{gen_id}")
+async def save_edits(gen_id: str, req: EditSaveRequest):
+    """Сохранить правки пользователя в preview/<gen_id>/ (внутри каталога) и пересобрать ZIP.
+    -> {ok, archive_url}. Позволяет 'посмотреть и подправить результат' прямо в браузере."""
+    gen_id, base = _preview_base(gen_id)
+    if not os.path.isdir(base):
+        raise HTTPException(status_code=404, detail="not_found")
+    saved = 0
+    for rel, content in (req.files or {}).items():
+        ext = rel.rsplit(".", 1)[-1].lower() if "." in rel else ""
+        if ext not in ("html", "css", "js"):
+            continue                                  # править можно только текстовые исходники
+        full = os.path.realpath(os.path.join(base, rel))
+        if not (full.startswith(base + os.sep)) or "\0" in rel:
+            continue                                  # анти path-traversal
+        try:
+            with open(full, "w", encoding="utf-8") as f:
+                f.write(content)
+            saved += 1
+        except OSError:
+            pass
+    # пересобрать ZIP архива, чтобы скачивание отдавало правленую версию
+    archive_name = f"superpromt_{gen_id}.zip"
+    archive_path = os.path.join(UPLOAD_DIR, archive_name)
+    try:
+        with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            for root, dirs, fnames in os.walk(base):
+                dirs[:] = [d for d in dirs if not d.startswith(".")]
+                for fn in fnames:
+                    fp = os.path.join(root, fn)
+                    zf.write(fp, os.path.relpath(fp, base))
+    except OSError:
+        pass
+    return {"ok": True, "saved": saved, "archive_url": f"/api/download/{archive_name}"}
+
+# --- Конкурсный режим: PSQ + Skills (веб-версия — БЕЗ метрики KSCR) ---
+
+@app.post("/api/evaluate")
+async def evaluate_competition(req: GenerateRequest):
+    """Async-обёртка: несколько sync-вызовов LLM → в поток (не блокировать event loop).
+    Примечание: в текущем фронте не используется; веб работает без метрики KSCR."""
+    return await asyncio.to_thread(_evaluate_sync, req)
+
+
+def _evaluate_sync(req: GenerateRequest):
+    """Оценка задачи: PSQ + подбор скиллов. Веб-версия PSQ БЕЗ метрики KSCR
+    (правдивость результата проверяют агенты в /api/generate, а не KSCR-гейт)."""
+    try:
+        model = req.model or settings.judge_model
+        from superprompt_cli import config as spt_config
+        cfg = spt_config.load()
+        
+        # 1. Router classification
+        domain, conf, _ = router.classify_conf(req.prompt)
+        
+        # 2. LLM-based skill ranking
+        skills = webskills.rank(req.prompt, k=7, model=model, cfg=cfg)
+        
+        # 3. PSQ evaluation
+        from superprompt_cli import psq as spt_psq
+        psq_result = spt_psq.score(req.prompt, model, cfg=cfg)
+        
+        # 4. PSQ gate with repair
+        final_prompt, psq_before, psq_after = spt_psq.gate(
+            req.prompt, model, model,
+            max_cycles=3, cfg=cfg, log=lambda m: None)
+        
+        # 5. Combined evaluation
+        combined = psq_skills.score_with_skills(
+            final_prompt, req.prompt, model, skills=skills, cfg=cfg)
+        
+        return {
+            "task": req.prompt,
+            "final_prompt": final_prompt,
+            "domain": domain,
+            "confidence": conf,
+            "psq_before": psq_before["psq"] if psq_before else None,
+            "psq_after": psq_after["psq"] if psq_after else None,
+            "psq_details": psq_after,
+            "skills": [{"name": s["name"], "description": s["text"][:200]} for s in skills],
+            "skills_count": len(skills),
+            "combined_score": combined,
+            "model": model,
+        }
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Ошибка оценки: {str(e)[:300]}")
+
+@app.get("/api/skills/rank")
+async def rank_skills(task: str, k: int = 5):
+    """LLM-based ранжирование скиллов для задачи."""
+    try:
+        from superprompt_cli import config as spt_config
+        cfg = spt_config.load()
+        skills = await asyncio.to_thread(webskills.rank, task, k, settings.judge_model, cfg)
+        return {
+            "task": task,
+            "skills": [{"name": s["name"], "description": s["text"][:200]} for s in skills],
+            "count": len(skills),
+            "model": settings.judge_model,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка ранжирования: {str(e)[:200]}")
 
 # --- Memory System (3 уровня памяти) ---
 
@@ -781,6 +1075,32 @@ async def clear_memory():
 # --- Загрузка файлов (прикрепление к задаче) ---
 UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+PREVIEW_DIR = os.path.join(UPLOAD_DIR, "preview")   # served-копии сгенерированных проектов (iframe-превью)
+os.makedirs(PREVIEW_DIR, exist_ok=True)
+
+
+def _gc_previews():
+    """Сборка мусора: удалить served-превью и архивы старше PREVIEW_TTL_SEC.
+    Иначе PREVIEW_DIR/UPLOAD_DIR растут без границ (находка ревью). Зовётся при генерации."""
+    cutoff = time.time() - PREVIEW_TTL_SEC
+    try:
+        for name in os.listdir(PREVIEW_DIR):
+            p = os.path.join(PREVIEW_DIR, name)
+            try:
+                if os.path.isdir(p) and os.path.getmtime(p) < cutoff:
+                    shutil.rmtree(p, ignore_errors=True)
+            except OSError:
+                pass
+        for name in os.listdir(UPLOAD_DIR):
+            if name.startswith("superpromt_") and name.endswith(".zip"):
+                p = os.path.join(UPLOAD_DIR, name)
+                try:
+                    if os.path.getmtime(p) < cutoff:
+                        os.remove(p)
+                except OSError:
+                    pass
+    except OSError:
+        pass
 MAX_FILE_SIZE = 10 * 1024 * 1024   # 10 МБ на файл
 MAX_FILES = 10
 
@@ -820,10 +1140,16 @@ if os.path.exists(frontend_path):
 
     @app.get("/")
     async def read_index():
-        return FileResponse(os.path.join(frontend_path, "index.html"))
+        # no-store: браузер НЕ кеширует HTML → после деплоя пользователь сразу видит новую версию
+        # (иначе стойкий кеш отдаёт старую страницу — «тоже самое» после исправлений)
+        return FileResponse(os.path.join(frontend_path, "index.html"),
+                            headers={"Cache-Control": "no-store, must-revalidate"})
 
 if __name__ == "__main__":
     import uvicorn
     # proxy_headers=False: не доверять клиентскому X-Forwarded-For
     # (иначе rate-limit обходится ротацией заголовка)
-    uvicorn.run(app, host="0.0.0.0", port=8000, proxy_headers=False)
+    # SPT_HOST/SPT_PORT: ufw блокирует прямой 8000 — в проде слушаем 127.0.0.1:8001,
+    # наружу порт 8000 публикует docker-socat (обходит ufw, как остальные docker-порты)
+    uvicorn.run(app, host=os.environ.get("SPT_HOST", "0.0.0.0"),
+                port=int(os.environ.get("SPT_PORT", "8000")), proxy_headers=False)
