@@ -1399,7 +1399,7 @@
                 <div class="settings-dropdown" id="settingsDropdown">
                     <h4 data-i18n="settings_api_key">Ключ API · BYOK</h4>
                     <input class="key-input" id="apikey" placeholder="sk-..." oninput="saveSettings()">
-                    <p class="khint" data-i18n="settings_hint">Без ключа — <b>демо</b>-результат. С ключом — <b>реальный</b> прогон задачи.</p>
+                     <p class="khint" data-i18n="settings_hint">Без ключа — <b>базовый</b> режим. С ключом — <b>полноценный</b> прогон задачи.</p>
                     <div class="sdiv"></div>
                     <h4 data-i18n="settings_mode">Режим прогона</h4>
                     <div class="mode-select">
@@ -1772,7 +1772,7 @@
     <!-- Onboarding Modal -->
     <div id="welcomeDemo" class="modal-overlay hidden welcome-demo">
         <div class="wd-card">
-            <div class="eyebrow" style="color:var(--molten-core)" data-i18n="wdEyebrow">SuperPromt · живое демо</div>
+            <div class="eyebrow" style="color:var(--molten-core)" data-i18n="wdEyebrow">SuperPromt · рабочий продукт</div>
             <h2 class="step-title" style="justify-content:center" data-i18n="wdTitle">От запроса до результата</h2>
             <div class="wd-ask">
                 <span class="wd-text" id="wdText"></span><span class="wd-caret" id="wdCaret"></span>
@@ -1797,7 +1797,7 @@
                 <p class="wd-tag"><b data-i18n="wdTag">Готовы повысить свою эффективность? Действуйте!</b></p>
                 <button class="btn-primary" style="border-radius:12px;padding:.8rem 2.4rem;width:auto" onclick="closeWelcomeDemo()" data-i18n="wdContinue">Продолжить</button>
             </div>
-            <button class="wd-skip" onclick="closeWelcomeDemo()" data-i18n="wdSkip">пропустить демо</button>
+            <button class="wd-skip" onclick="closeWelcomeDemo()" data-i18n="wdSkip">пропустить</button>
         </div>
     </div>
 
@@ -1861,14 +1861,14 @@
                 nav_history: "История",
                 psqLive: "PSQ live",
                 settings_ok: "ОК",
-                wdEyebrow: "SuperPromt · живое демо",
+                wdEyebrow: "SuperPromt · рабочий продукт",
                 wdTitle: "От запроса до результата",
                 wdYour: "Твой запрос",
                 wdIdeal: "Идеальная постановка · PSQ",
                 wdAgents: "агенты доводят постановку по чеклисту CSP-8",
                 wdTag: "Готовы повысить свою эффективность? Действуйте!",
                 wdContinue: "Продолжить",
-                wdSkip: "пропустить демо",
+                wdSkip: "пропустить",
                 wdDemoPrompt: "сайт кофейни",
                 wdSteps: [
                     ["Router · подбор агентов", "домен: web · тип: лендинг"],
@@ -1876,7 +1876,7 @@
                     ["Сборка и проверка", "результат готов: архив с однокликовым запуском"]
                 ],
                 settings_api_key: "Ключ API · BYOK",
-                settings_hint: "Без ключа — <b>демо</b>-результат. С ключом — <b>реальный</b> прогон задачи.",
+                settings_hint: "Без ключа — <b>базовый</b> режим. С ключом — <b>полноценный</b> прогон задачи.",
                 settings_mode: "Режим прогона",
                 mode_kodik: "Через Kodik — сразу результат",
                 mode_byok: "Свой ключ (BYOK)",
@@ -2183,7 +2183,7 @@
             el('compareVerdict').classList.remove('hidden');
             const delta = Math.abs(scoreA - scoreB).toFixed(2);
             const demoNote = (resA.demo || resB.demo)
-                ? (currentLang === 'ru' ? ' · демо-оценка (без ключа)' : ' · demo estimate (no key)') : '';
+                ? (currentLang === 'ru' ? ' · базовый режим (без ключа)' : ' · basic mode (no key)') : '';
             if (Math.abs(scoreA - scoreB) < 0.01) {
                 el('verdictText').textContent = (currentLang === 'ru' ? 'Паритет' : 'Parity') + demoNote;
                 el('verdictDelta').textContent = `Δ 0.00`;
@@ -3202,7 +3202,7 @@
                 p.style.color = '#4ad07a';
                 p.style.borderColor = 'rgba(74,208,122,.4)';
             } else {
-                p.textContent = currentLang === 'ru' ? 'демо' : 'demo';
+                p.textContent = currentLang === 'ru' ? 'базовый' : 'basic';
                 p.style.color = '';
                 p.style.borderColor = '';
             }
