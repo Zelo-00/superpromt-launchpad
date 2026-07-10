@@ -9,7 +9,7 @@
   "materials": {
     "marketplace": "Опубликовать из Kodik: Marketplace → Публикация → SuperPromt PSQ Web",
     "presentation": "https://github.com/Zelo-00/superpromt-launchpad/blob/main/docs/SuperPromt_%D0%A1%D1%82%D0%B0%D1%82%D1%8C%D1%8F.docx",
-    "repository": "https://github.com/Zelo-00/superpromt-launchpad (репозиторий приватный — сделать публичным перед сдачей)",
+    "repository": "https://github.com/Zelo-00/superpromt-launchpad",
     "readme": "https://github.com/Zelo-00/superpromt-launchpad/blob/main/README.md",
     "demo": "http://193.39.208.35:8000"
   },
