@@ -1,5 +1,6 @@
 import asyncio
 import os
+import re
 import sys
 import time
 import uuid
@@ -130,8 +131,10 @@ frontend_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../fron
 # --- Models ---
 
 MAX_PROMPT_LENGTH = 5000
-GEN_MAX_TOKENS = 24000           # лимит токенов генерации кода (против обрыва)
-REVIEW_MAX_TOKENS = 500          # лимит токенов агента-ревьюера
+GEN_MAX_TOKENS = 32000           # общий лимит токенов генерации (поднят против обрыва)
+PER_FILE_MAX_TOKENS = 16000      # бюджет НА КАЖДЫЙ файл при многопроходной генерации (HTML/CSS/JS)
+MULTIPASS_PROMPT_CHARS = 900     # промт длиннее → сложный сайт → генерировать по частям (по файлам)
+REVIEW_MAX_TOKENS = 700          # лимит токенов агента-ревьюера
 MAX_BUILD_CYCLES = 3             # ремонт-цикл: максимум проходов до PASS
 PREVIEW_TTL_SEC = 6 * 3600       # сколько живут served-превью до сборки мусора
 LLM_ENV_KEYS = ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GOOGLE_API_KEY")
@@ -583,6 +586,20 @@ def _answer_to_files(answer, work_dir):
             tag = '<script src="js/app.js"></script>'
             html_content = html_content.replace("</body>", tag + "\n</body>", 1) \
                 if "</body>" in html_content else html_content + "\n" + tag
+
+        # схлопнуть ДУБЛИ подключений (модель иногда пишет <link>/<script> на один файл дважды)
+        def _dedup_tag(html, pattern):
+            seen_one = [False]
+
+            def keep_first(m):
+                if seen_one[0]:
+                    return ""
+                seen_one[0] = True
+                return m.group(0)
+            return re.sub(pattern, keep_first, html, flags=re.I)
+        html_content = _dedup_tag(html_content, r'<link[^>]+href=["\']css/style\.css["\'][^>]*>\s*')
+        html_content = _dedup_tag(html_content, r'<script[^>]+src=["\']js/app\.js["\'][^>]*>\s*</script>\s*')
+
         with open(index_path, 'w', encoding='utf-8') as f:
             f.write(html_content)
         for fc in files_created:
@@ -600,45 +617,84 @@ def _answer_to_files(answer, work_dir):
     return uniq
 
 
-@app.post("/api/generate", response_model=GenerateResponse)
-async def generate_code(req: GenerateRequest):
-    """Async-обёртка: тяжёлый синхронный конвейер выносится в поток, чтобы НЕ блокировать
-    event loop на 30–300 с (находка ревью). Параллельные запросы больше не стоят в очереди."""
-    return await asyncio.to_thread(_generate_sync, req)
+def _extract_block(text, langs=("html", "css", "javascript", "js")):
+    """Достать первый fenced-блок нужного языка; иначе снять любые ``` ; иначе вернуть как есть."""
+    import re
+    m = re.search(r"```(?:%s)?\s*\n(.*?)```" % "|".join(langs), text or "", re.S | re.I)
+    if m:
+        return m.group(1).strip()
+    return re.sub(r"^```[a-z]*\s*|\s*```$", "", (text or "").strip(), flags=re.I).strip()
 
 
-def _generate_sync(req: GenerateRequest):
-    """Полный pipeline: PSQ → скиллы → генерация кода LLM → АГЕНТНАЯ ПРОВЕРКА → (ремонт-цикл до
-    результата) → архив. Веб-версия PSQ: без метрики KSCR — результат проверяют агенты."""
-    try:
-        _gc_previews()                       # сборка мусора старых превью/архивов (анти-утечка диска)
-        # Генерацию ведёт code-специалист qwen3-coder-480b — идеальный для кода, стабильный
-        # PASS 6/6 за 1 цикл (~30с). Дешёвая gpt-oss-20b периодически недоступна на шлюзе (503),
-        # средние qwen3-next-80b/deepseek-v3.2 нестабильны — поэтому дефолт на надёжного кодера.
-        # Конвейер PSQ+скиллы+ревьюер+ремонт-цикл делает результат воспроизводимым на разных
-        # моделях (независимость от модели). Переопределяется req.model или env SPT_GEN_MODEL.
-        model = req.model or os.environ.get("SPT_GEN_MODEL") or "openai/qwen3-coder-480b-a35b-instruct-maas"
-        tier = req.tier
-        work_dir = tempfile.mkdtemp(prefix="spt_gen_")
+def _gen_multipass(final_prompt, domain, skills_text, model, cfg, feedback="", is_game=False):
+    """МНОГОПРОХОДНАЯ генерация ПО ФАЙЛАМ: index.html → css/style.css → js/app.js, каждый со СВОИМ
+    полным бюджетом токенов (против обрыва). HTML передаётся контекстом в CSS/JS для связности.
+    is_game=True → JS-проход получает ИГРОВОЙ системный промпт (полная рабочая механика).
+    Возвращает (answer-блоб в FILE-формате для _answer_to_files, tokens)."""
+    fb = ("\n\nОБЯЗАТЕЛЬНО исправь замечания ревьюера предыдущей версии: " + feedback) if feedback else ""
+    tokens = 0
 
-        try:
-            # 1. Router + skills (LLM-based ranking)
-            from superprompt_cli import config as spt_config
-            cfg = spt_config.load()
-            domain, conf, _ = router.classify_conf(req.prompt)
-            
-            # Используем LLM-based ранжирование для выбора скиллов
-            skills = webskills.rank(req.prompt, k=5, model=settings.judge_model, cfg=cfg)
+    def call(system, user, max_tok):
+        nonlocal tokens
+        r = providers.chat(model, [{"role": "system", "content": system},
+                                   {"role": "user", "content": user}],
+                           max_tokens=max_tok, temperature=0.3, cfg=cfg, timeout=300)
+        tokens += (r.get("usage", {}) or {}).get("total_tokens", 0)
+        return r["text"]
 
-            # 2. PSQ gate с интеграцией скиллов (3 cycles to ensure PSQ >= 0.8)
-            from superprompt_cli import psq as spt_psq
-            final_prompt, psq_before, psq_after = spt_psq.gate(
-                req.prompt, settings.judge_model, model,
-                max_cycles=3, cfg=cfg, log=lambda m: None)
+    # Проход 1 — ПОЛНЫЙ index.html
+    if is_game:
+        html_sys = (f"Ты — expert game developer. Домен: игра.\n"
+                    "СГЕНЕРИРУЙ ТОЛЬКО index.html для браузерной игры: разметка игрового поля/канваса, "
+                    "табло счёта, кнопка рестарта, подсказка управления. Осмысленные id (#board/#canvas, "
+                    "#score, #restart) — на них завяжется JS. Подключи <link href=\"css/style.css\"> и "
+                    "<script src=\"js/app.js\"></script> перед </body>. Верни ОДИН блок ```html```.")
+    else:
+        html_sys = (f"Ты — expert front-end developer. Домен: {domain}.\n"
+                    f"Релевантные навыки:\n{skills_text}\n\n"
+                    "СГЕНЕРИРУЙ ТОЛЬКО ФАЙЛ index.html — полностью, до конца, со ВСЕМИ заявленными секциями.\n"
+                    "Правила: семантический HTML5; для КАЖДОЙ секции/элемента осмысленные class/id (их будут "
+                    "стилизовать и оживлять); подключи <link rel=stylesheet href=\"css/style.css\"> в <head> и "
+                    "<script src=\"js/app.js\"></script> перед </body>; внешние либы — через CDN. НЕ пиши CSS/JS "
+                    "инлайн (кроме мелких SVG). НЕ добавляй незапрошенных секций. Верни ОДИН блок ```html``` и всё.")
+    html = _extract_block(call(html_sys, final_prompt + fb, PER_FILE_MAX_TOKENS), ("html",))
 
-            # 3. Build system prompt with skills
-            skills_text = "\n".join(f"### {s['name']}\n{s['text'][:500]}" for s in skills)
-            system = f"""Ты — expert full-stack developer. СОЗДАЙ ПОЛНЫЙ ВЕБ-ПРОЕКТ.
+    # Проход 2 — ПОЛНЫЙ CSS под этот HTML
+    css_sys = ("Ты — expert CSS-разработчик. Дан HTML-файл. Сгенерируй ТОЛЬКО css/style.css — полностью, "
+               "покрывая КАЖДУЮ секцию и класс из HTML (никаких пропущенных секций). CSS-переменные, "
+               "flexbox/grid, адаптивность (@media), hover/переходы, аккуратная типографика и отступы. "
+               "Верни ОДИН блок ```css``` и всё, без пояснений.")
+    css = _extract_block(call(css_sys, "HTML проекта:\n" + html[:16000], PER_FILE_MAX_TOKENS), ("css",))
+
+    # Проход 3 — JS
+    if is_game:
+        js_sys = (
+            "Ты — expert game developer. Дан HTML игры. Сгенерируй ТОЛЬКО js/app.js — ПОЛНОСТЬЮ РАБОЧУЮ игру.\n"
+            "ОБЯЗАТЕЛЬНО:\n"
+            "1) Инициализация СРАЗУ при загрузке (DOMContentLoaded): создать НАЧАЛЬНОЕ состояние игры "
+            "(поле/плитки/герой видны сразу, а не пустой экран).\n"
+            "2) ПОЛНАЯ игровая механика по правилам игры: ходы, слияния/столкновения, спавн, подсчёт очков.\n"
+            "3) Управление: обработчики клавиш (keydown стрелки/WASD) и/или мыши; кнопка рестарта сбрасывает игру.\n"
+            "4) Условия конца игры (победа/поражение) и корректный рендер каждого хода.\n"
+            "5) Ссылайся ТОЛЬКО на существующие в HTML id. Никаких фреймворков, чистый JS. Код ЗАВЕРШЁН, без «...».\n"
+            "Верни ОДИН блок ```javascript``` — вся логика целиком.")
+    else:
+        js_sys = ("Ты — expert JS-разработчик. Дан HTML-файл. Сгенерируй ТОЛЬКО js/app.js для нужной "
+                  "интерактивности (обработчики, простое состояние, никаких фреймворков). Ссылайся ТОЛЬКО на "
+                  "существующие в HTML id/class. Если интерактив не нужен — верни пустой блок. "
+                  "Верни ОДИН блок ```javascript``` и всё.")
+    js = _extract_block(call(js_sys, "HTML проекта:\n" + html[:16000], PER_FILE_MAX_TOKENS), ("javascript", "js"))
+
+    parts = ["```html\n<!-- FILE: index.html -->\n%s\n```" % html,
+             "```css\n/* FILE: css/style.css */\n%s\n```" % css]
+    if js and len(js.strip()) > 10:
+        parts.append("```javascript\n// FILE: js/app.js\n%s\n```" % js)
+    return "\n\n".join(parts), tokens
+
+
+def _single_shot_system(domain, skills_text):
+    """Системный промпт для ОДНОШОТА (простые задачи): все файлы в одном ответе с FILE-маркерами."""
+    return f"""Ты — expert full-stack developer. СОЗДАЙ ПОЛНЫЙ ВЕБ-ПРОЕКТ.
 
 Домен: {domain}. Скиллы:\n{skills_text}
 
@@ -681,24 +737,89 @@ const app = {{...}}
 - СВЯЗНОСТЬ: index.html подключает css/style.css (<link>) и js/app.js (<script src>) — обязательно.
 - Каждая заявленная в задаче секция/форма/кнопка РЕАЛЬНО присутствует и рабочая."""
 
+
+def _produce_files(final_prompt, domain, skills_text, single_system, model, cfg, work_dir,
+                   feedback, complex_site, is_game):
+    """ОДИН проход генерации → файлы в work_dir. Диспетчер режимов:
+    сложный сайт/игра → многопроход по файлам (полный бюджет на каждый);
+    простая задача → одношот (все файлы в одном ответе). -> (files_created, tokens, answer)."""
+    if complex_site:
+        answer, tok = _gen_multipass(final_prompt, domain, skills_text, model, cfg,
+                                     feedback, is_game=is_game)
+    else:
+        msgs = [{"role": "system", "content": single_system},
+                {"role": "user", "content": final_prompt}]
+        if feedback:
+            msgs.append({"role": "user", "content":
+                "Предыдущая версия ЗАБРАКОВАНА агентом-ревьюером. Исправь ВСЕ замечания и "
+                "верни ПОЛНЫЙ код проекта заново (все файлы целиком):\n" + feedback})
+        r = providers.chat(model, msgs, max_tokens=GEN_MAX_TOKENS, temperature=0.3, cfg=cfg, timeout=300)
+        answer, tok = r["text"], (r.get("usage", {}) or {}).get("total_tokens", 0)
+    return _answer_to_files(answer, work_dir), tok, answer
+
+
+@app.post("/api/generate", response_model=GenerateResponse)
+async def generate_code(req: GenerateRequest):
+    """Async-обёртка: тяжёлый синхронный конвейер выносится в поток, чтобы НЕ блокировать
+    event loop на 30–300 с (находка ревью). Параллельные запросы больше не стоят в очереди."""
+    return await asyncio.to_thread(_generate_sync, req)
+
+
+def _generate_sync(req: GenerateRequest):
+    """Полный pipeline: PSQ → скиллы → генерация кода LLM → АГЕНТНАЯ ПРОВЕРКА → (ремонт-цикл до
+    результата) → архив. Веб-версия PSQ: без метрики KSCR — результат проверяют агенты."""
+    try:
+        _gc_previews()                       # сборка мусора старых превью/архивов (анти-утечка диска)
+        # Генерацию ведёт code-специалист qwen3-coder-480b — идеальный для кода, стабильный
+        # PASS 6/6 за 1 цикл (~30с). Дешёвая gpt-oss-20b периодически недоступна на шлюзе (503),
+        # средние qwen3-next-80b/deepseek-v3.2 нестабильны — поэтому дефолт на надёжного кодера.
+        # Конвейер PSQ+скиллы+ревьюер+ремонт-цикл делает результат воспроизводимым на разных
+        # моделях (независимость от модели). Переопределяется req.model или env SPT_GEN_MODEL.
+        model = req.model or os.environ.get("SPT_GEN_MODEL") or "openai/qwen3-coder-480b-a35b-instruct-maas"
+        tier = req.tier
+        work_dir = tempfile.mkdtemp(prefix="spt_gen_")
+
+        try:
+            # 1. Router + skills (LLM-based ranking)
+            from superprompt_cli import config as spt_config
+            cfg = spt_config.load()
+            domain, conf, _ = router.classify_conf(req.prompt)
+            
+            # Используем LLM-based ранжирование для выбора скиллов
+            skills = webskills.rank(req.prompt, k=5, model=settings.judge_model, cfg=cfg)
+
+            # 2. PSQ gate с интеграцией скиллов (3 cycles to ensure PSQ >= 0.8)
+            from superprompt_cli import psq as spt_psq
+            final_prompt, psq_before, psq_after = spt_psq.gate(
+                req.prompt, settings.judge_model, model,
+                max_cycles=3, cfg=cfg, log=lambda m: None)
+
+            # 3. Системный промпт одношота (для простых задач); сложное/игра идут многопроходом
+            skills_text = "\n".join(f"### {s['name']}\n{s['text'][:500]}" for s in skills)
+            system = _single_shot_system(domain, skills_text)
+
             # 4-6. РЕМОНТ-ЦИКЛ ДО РЕЗУЛЬТАТА: генерация → сборка файлов → агентная проверка.
             #      FAIL → регенерация с замечаниями ревьюера (планка: до PASS, максимум 3 прохода).
+            #      Сложный сайт (длинный промт / много секций) → МНОГОПРОХОДНАЯ генерация по файлам
+            #      (каждый со своим бюджетом токенов — не обрезается); простой → быстрый одношот.
             base_user = final_prompt
+            # игра → всегда многопроход с ИГРОВЫМ JS-промптом (полная рабочая механика)
+            is_game = bool(re.search(r"\bигр\w*|\bgame\b|змейк|тетрис|арканоид|платформер|пинг-понг|"
+                                     r"пинпонг|2048|судоку|викторин|крестики|сапёр|snake|tetris|arkanoid|"
+                                     r"puzzle|канвас-игр|игровое поле", final_prompt, re.I))
+            complex_site = (is_game or len(final_prompt) > MULTIPASS_PROMPT_CHARS or
+                            len(re.findall(r"секц|блок|hero|тариф|отзыв|футер|прайс|галере|раздел|"
+                                           r"section|pricing|testimonial|footer|feature",
+                                           final_prompt, re.I)) >= 3)
             build_feedback = ""
             answer, files_created, verification, tokens_used = "", [], None, 0
             for _cycle in range(MAX_BUILD_CYCLES):
                 if _cycle > 0:
                     work_dir = tempfile.mkdtemp(prefix="spt_gen_")   # свежая папка на повтор
-                msgs = [{"role": "system", "content": system},
-                        {"role": "user", "content": base_user}]
-                if build_feedback:
-                    msgs.append({"role": "user", "content":
-                        "Предыдущая версия ЗАБРАКОВАНА агентом-ревьюером. Исправь ВСЕ замечания и "
-                        "верни ПОЛНЫЙ код проекта заново (все файлы целиком):\n" + build_feedback})
-                r = providers.chat(model, msgs, max_tokens=GEN_MAX_TOKENS, temperature=0.3, cfg=cfg, timeout=300)
-                answer = r["text"]
-                tokens_used += (r.get("usage", {}) or {}).get("total_tokens", 0)
-                files_created = _answer_to_files(answer, work_dir)
+                files_created, tok, answer = _produce_files(
+                    base_user, domain, skills_text, system, model, cfg, work_dir,
+                    build_feedback, complex_site, is_game)
+                tokens_used += tok
                 verification = _verify_result(work_dir, files_created, req.prompt, model, cfg)
                 verification["cycles"] = _cycle + 1
                 if verification.get("verdict") == "PASS":

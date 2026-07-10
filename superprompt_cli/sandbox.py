@@ -83,7 +83,7 @@ def deny_roots():
         _PRODUCT,                                   # сам терминал (реализация)
         os.path.join(home, ".spt"),                 # секреты: .env, teacher/creative.md
         os.path.join(home, "metodika"),             # метрика, SuperPromt, PromtMaster, agents, redteam
-        os.path.join(home, ".claude"),              # скиллы/агенты Claude Code
+        os.path.join(home, ".claude"),              # конфиг AI-ассистента
         os.path.join(home, ".mimocode"),            # скиллы MiMo
         os.path.join(home, ".ssh"),
         os.path.join(home, ".aws"),

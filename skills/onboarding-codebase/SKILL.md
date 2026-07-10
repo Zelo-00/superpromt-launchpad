@@ -1,12 +1,12 @@
 ---
 name: onboarding-codebase
-description: Systematically analyze an unfamiliar codebase and produce a structured onboarding guide plus an initial CLAUDE.md. Use when joining a new project, opening an existing repo for the first time with Claude Code, or when a user says "help me understand this codebase", "give me a tour", or "generate a CLAUDE.md". Do not use for repos you already have deep context on — use grep/read directly instead.
+description: Systematically analyze an unfamiliar codebase and produce a structured onboarding guide plus an initial project instructions file. Use when joining a new project, opening an existing repo for the first time with an AI coding assistant, or when a user says "help me understand this codebase", "give me a tour", or "generate project instructions". Do not use for repos you already have deep context on — use grep/read directly instead.
 ---
 
 ## When to use
-- First time opening a project with Claude Code
+- First time opening a project with an AI coding assistant
 - Joining a new team or repo
-- User asks: "help me understand this codebase", "give me a tour", "generate CLAUDE.md"
+- User asks: "help me understand this codebase", "give me a tour", "generate PROJECT_INSTRUCTIONS.md"
 - Preparing to onboard another developer
 
 ## When NOT to use
@@ -158,9 +158,9 @@ git branch -r | head -10
 | Add a DB table | `prisma/schema.prisma` |
 ```
 
-#### Output B — CLAUDE.md (written to project root)
+#### Output B — PROJECT_INSTRUCTIONS.md (written to project root)
 
-If `CLAUDE.md` already exists: read it, enhance (keep existing, mark additions).
+If `PROJECT_INSTRUCTIONS.md` already exists: read it, enhance (keep existing, mark additions).
 If it doesn't exist: create it. Keep under 100 lines.
 
 ```markdown
@@ -197,7 +197,7 @@ If it doesn't exist: create it. Keep under 100 lines.
 - [ ] Tech stack identified from actual manifests (not guessed)
 - [ ] At least one real entry point path confirmed to exist
 - [ ] At least one real test file confirmed to exist
-- [ ] CLAUDE.md written and readable
+- [ ] PROJECT_INSTRUCTIONS.md written and readable
 - [ ] Guide is under 2 minutes to skim (no exhaustive lists)
 - [ ] Unknown conventions labeled "Could not detect" rather than guessed
 
@@ -206,22 +206,22 @@ If it doesn't exist: create it. Keep under 100 lines.
 ### Example 1 — First time in a new repo
 ```
 User: "Walk me through this codebase"
-Action: run all 4 phases → print onboarding guide to chat + write CLAUDE.md
-Output: guide in ~40 lines + CLAUDE.md in ~50 lines
+Action: run all 4 phases → print onboarding guide to chat + write PROJECT_INSTRUCTIONS.md
+Output: guide in ~40 lines + PROJECT_INSTRUCTIONS.md in ~50 lines
 ```
 
-### Example 2 — Generate CLAUDE.md only
+### Example 2 — Generate PROJECT_INSTRUCTIONS.md only
 ```
-User: "Generate a CLAUDE.md for this project"
-Action: run phases 1–3, skip guide, write CLAUDE.md only
-Output: project-specific CLAUDE.md
+User: "Generate a PROJECT_INSTRUCTIONS.md for this project"
+Action: run phases 1–3, skip guide, write PROJECT_INSTRUCTIONS.md only
+Output: project-specific PROJECT_INSTRUCTIONS.md
 ```
 
-### Example 3 — Update existing CLAUDE.md
+### Example 3 — Update existing PROJECT_INSTRUCTIONS.md
 ```
-User: "Update CLAUDE.md with current conventions"
-Action: read existing CLAUDE.md → run phases 1–3 → merge, mark additions
-Output: enhanced CLAUDE.md with "## Added [date]:" markers
+User: "Update PROJECT_INSTRUCTIONS.md with current conventions"
+Action: read existing PROJECT_INSTRUCTIONS.md → run phases 1–3 → merge, mark additions
+Output: enhanced PROJECT_INSTRUCTIONS.md with "## Added [date]:" markers
 ```
 
 ## Anti-patterns / Known gotchas
@@ -229,14 +229,14 @@ Output: enhanced CLAUDE.md with "## Added [date]:" markers
 | Anti-pattern | Fix |
 |---|---|
 | Reading every source file in Phase 1 | Use glob/grep; read selectively only when a signal is ambiguous |
-| Overwriting an existing CLAUDE.md | Always read it first; enhance, never replace |
+| Overwriting an existing PROJECT_INSTRUCTIONS.md | Always read it first; enhance, never replace |
 | Guessing conventions when detection fails | Write "Could not detect" — wrong guidance is worse than none |
-| Writing a CLAUDE.md > 100 lines | Keep it focused on decisions that affect coding, not project history |
+| Writing a PROJECT_INSTRUCTIONS.md > 100 lines | Keep it focused on decisions that affect coding, not project history |
 | Listing all 200 dependencies | Highlight only the ones that change how you write code |
 | Describing self-evident directories | `src/` does not need a description |
 
 ## Boundaries / Scope
 
-Covers: codebase structure analysis, convention detection, onboarding guide, CLAUDE.md generation.
+Covers: codebase structure analysis, convention detection, onboarding guide, PROJECT_INSTRUCTIONS.md generation.
 Does not cover: code quality review, architecture recommendations, refactoring suggestions,
 or security auditing — those are separate skills.

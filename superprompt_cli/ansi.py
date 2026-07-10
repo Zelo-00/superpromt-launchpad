@@ -96,7 +96,7 @@ G = {  # глифы: UTF-8 / ASCII
     "bar_off": "▱" if _UTF else "-",
     "prompt": "❯" if _UTF else ">",
     "pick": "▸" if _UTF else ">",
-    # бренд-марка и рамки (стиль Claude Code, тема лавы)
+    # бренд-марка и рамки (тема лавы)
     "spark": "✻" if _UTF else "*",
     "box_tl": "╭" if _UTF else "+", "box_tr": "╮" if _UTF else "+",
     "box_bl": "╰" if _UTF else "+", "box_br": "╯" if _UTF else "+",
@@ -229,7 +229,7 @@ def _truncate(s, maxw):
 
 
 def box(lines, width=None, accent=None, title=None):
-    """Бокс с рамкой (стиль Claude Code). width=None → адаптивно под терминал.
+    """Бокс с рамкой. width=None → адаптивно под терминал.
     title → заголовок ВСТРОЕН в верхнюю грань: ╭─ Заголовок ─────╮ (MiMo-стиль).
     Длинные строки аккуратно обрезаются по ширине (рамка не ломается)."""
     accent = accent or blue

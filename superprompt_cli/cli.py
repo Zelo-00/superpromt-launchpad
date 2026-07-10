@@ -204,7 +204,7 @@ def _banner(cfg, args):
 
 
 def _print_result(res, quiet=False, lang="ru"):
-    """Карточка результата в стиле дерева Claude Code: ⏺ готово + ⎿ паспорт (домен · PSQ · модель)."""
+    """Карточка результата в стиле дерева: ⏺ готово + ⎿ паспорт (домен · PSQ · модель)."""
     out = sys.stderr if quiet else sys.stdout
     p = res["passport"]
     if quiet:  # -q: сырой ответ в stdout + одна паспорт-строка в stderr (контракт для пайпов)
@@ -295,7 +295,7 @@ _AT_RE = None
 
 
 def _expand_at_files(task):
-    """@путь в задаче → содержимое файла (как в MiMo/Claude). Большие файлы усекаются
+    """@путь в задаче → содержимое файла. Большие файлы усекаются
     с пометкой. Возвращает (обогащённая_задача, список_вложенных_файлов)."""
     import re
     global _AT_RE
@@ -344,7 +344,7 @@ def _run_one(task, cfg, args, history=None):
     from . import anim
     quiet = getattr(args, "quiet", False)
     lang = cfg.get("ui_lang", "ru")
-    # @путь → вложить содержимое файлов в задачу (как MiMo/Claude)
+    # @путь → вложить содержимое файлов в задачу
     if "@" in task:
         task, attached, refused = _expand_at_files(task)
         if not quiet:
@@ -611,7 +611,7 @@ def _examples(lang="ru"):
 
 
 def _startup_menu(cfg, lang="ru"):
-    """Стартовое меню (getting-started в стиле MiMo/Claude Code): показывается один раз при
+    """Стартовое меню (getting-started): показывается один раз при
     запуске. Возвращает список (метка, команда) для нумерованного быстрого пуска (жать 1/2/3/4)."""
     from .ansi import box, layout, _dw, _truncate
     ru = lang == "ru"

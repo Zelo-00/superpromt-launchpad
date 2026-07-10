@@ -3,7 +3,7 @@
 ## Что сдаём
 
 ### 1. Продукт
-**SuperPromt** — AI-IDE альтернатива Claude Code с метрикой PSQ.
+**SuperPromt** — AI-инструмент для оценки и улучшения постановки задач с метрикой PSQ.
 
 - Веб-интерфейс: `http://localhost:8000`
 - CLI: `python3 -m superprompt_cli`

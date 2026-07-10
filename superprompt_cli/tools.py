@@ -118,7 +118,7 @@ def _safe_env(cfg):
 
 def run(name, args, yolo=False, confirm=None, cwd=None, cfg=None, perm=None, nonce=""):
     """Выполнить инструмент. confirm(name, args, reason)->bool спрашивает пользователя.
-    perm — режим разрешений ask|auto|yolo (Claude-Code-style); yolo=True — совместимость.
+    perm — режим разрешений ask|auto|yolo (MI-style); yolo=True — совместимость.
     cfg включает режим «чёрный ящик»: инструменты не видят внутренние файлы продукта."""
     if "__parse_error" in args:
         return ("ошибка: %s. Повтори вызов инструмента с КОРРЕКТНЫМ JSON в аргументах."
