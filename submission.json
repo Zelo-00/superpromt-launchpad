@@ -1,10 +1,10 @@
 {
   "$schema": "kodik-launchpad/submission/v1",
 
-  "email": "YOUR_EMAIL",
-  "telegram": "YOUR_TELEGRAM",
+  "email": "semennegoitsa@xmail.ru",
+  "telegram": "@zerno_17",
   "project_title": "SuperPromt PSQ Web",
-  "author_name": "YOUR_NAME",
+  "author_name": "Zerno",
 
   "materials": {
     "marketplace": "Опубликовать из Kodik: Marketplace → Публикация → SuperPromt PSQ Web",
