@@ -1519,7 +1519,7 @@
                         <div class="build-actions">
                             <a id="downloadZip" class="btn-primary" style="text-decoration:none;text-align:center" download>
                                 <span data-i18n="downloadZip">↓ Скачать архив</span></a>
-                            <button id="editToggle" class="btn-secondary" style="flex:1" data-i18n="editBtn">✏️ Редактировать</button>
+                            <button id="editToggle" class="btn-secondary" style="flex:1" data-i18n="editBtn">Редактировать</button>
                             <a id="openPreview" class="btn-secondary" target="_blank" style="text-decoration:none;text-align:center">
                                 <span data-i18n="openTab">Открыть в новой вкладке</span></a>
                         </div>
@@ -1527,7 +1527,7 @@
                             <div id="editTabs" class="edit-tabs"></div>
                             <textarea id="editArea" class="edit-area" spellcheck="false"></textarea>
                             <div class="build-actions">
-                                <button id="editSave" class="btn-primary" style="flex:1" data-i18n="editSave">💾 Сохранить и обновить превью</button>
+                                <button id="editSave" class="btn-primary" style="flex:1" data-i18n="editSave">Сохранить и обновить превью</button>
                                 <button id="editCancel" class="btn-secondary" data-i18n="editCancel">Отмена</button>
                             </div>
                             <p class="tokens-hint" id="editMsg" style="text-align:center;margin-top:.5rem"></p>
@@ -1925,8 +1925,8 @@
                 openTab: "Открыть в новой вкладке",
                 agentCheck: "Проверка агентами",
                 verifyTitle: "Проверка агентами",
-                editBtn: "✏️ Редактировать",
-                editSave: "💾 Сохранить и обновить превью",
+                editBtn: "<svg viewBox='0 0 24 24' style='width:14px;height:14px;vertical-align:-2px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;margin-right:5px'><path d='M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z'/></svg>Редактировать",
+                editSave: "<svg viewBox='0 0 24 24' style='width:14px;height:14px;vertical-align:-2px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;margin-right:5px'><path d='M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z'/><path d='M17 21v-8H7v8M7 3v5h8'/></svg>Сохранить и обновить превью",
                 editCancel: "Отмена",
                 improvedVariant: "Улучшенный вариант",
                 applyRepair: "Подставить в поле",
@@ -2014,8 +2014,8 @@
                 openTab: "Open in new tab",
                 agentCheck: "Agent Review",
                 verifyTitle: "Agent Review",
-                editBtn: "✏️ Edit",
-                editSave: "💾 Save & refresh preview",
+                editBtn: "<svg viewBox='0 0 24 24' style='width:14px;height:14px;vertical-align:-2px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;margin-right:5px'><path d='M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z'/></svg>Edit",
+                editSave: "<svg viewBox='0 0 24 24' style='width:14px;height:14px;vertical-align:-2px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;margin-right:5px'><path d='M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z'/><path d='M17 21v-8H7v8M7 3v5h8'/></svg>Save & refresh preview",
                 editCancel: "Cancel",
                 improvedVariant: "Improved Variant",
                 applyRepair: "Apply to field",
@@ -3127,7 +3127,7 @@
                     // перезагрузить превью (cache-bust) и обновить ссылку на архив
                     el('previewFrame').src = '/api/preview/' + _genId + '/index.html?t=' + Date.now();
                     if (d.archive_url) el('downloadZip').href = d.archive_url;
-                    el('editMsg').textContent = '✓ сохранено, превью обновлено (' + (d.saved||0) + ' файлов)';
+                    el('editMsg').innerHTML = SVG.check + 'сохранено, превью обновлено (' + (d.saved||0) + ' файлов)';
                 } else el('editMsg').textContent = 'ошибка сохранения';
             } catch (e) { el('editMsg').textContent = 'ошибка сети при сохранении'; }
             finally { el('editSave').classList.remove('loading'); el('editSave').disabled = false; }
@@ -3193,6 +3193,9 @@
         function saveSettings() {
             const key = el('apikey').value.trim();
             localStorage.setItem('superpromt_api_key', key);
+            _keyValid = false;                       // изменили ключ — нужно перепроверить
+            if (typeof updateModelGate === 'function') updateModelGate();
+            const st = el('keyStatus'); if (st) st.style.display = 'none';
             markMode();
         }
 
@@ -3207,7 +3210,9 @@
             localStorage.setItem('superpromt_run_mode', mode);
             document.querySelectorAll('.mi').forEach(m => m.classList.remove('active'));
             el(`mode-${mode}`).classList.add('active');
+            _keyValid = false;                                 // смена провайдера — ключ нужно перепроверить
             if (typeof updateModelPrice === 'function') updateModelPrice();
+            if (typeof updateModelGate === 'function') updateModelGate();
         }
 
         function loadSettings() {
@@ -3220,32 +3225,53 @@
             populateModels();
             renderSpend();
             markMode();
+            updateModelGate();
             if (key) verifyApiKey();
         }
 
+        function _providerFromMode() {
+            const mode = localStorage.getItem('superpromt_run_mode') || 'kodik';
+            return mode === 'openai' ? 'openai' : 'openrouter';   // прямой API проверяем как OpenAI-совместимый
+        }
+        function updateModelGate() {
+            const sel = el('modelSelect');
+            if (!sel) return;
+            const mode = localStorage.getItem('superpromt_run_mode') || 'kodik';
+            const ok = (mode === 'kodik') || _keyValid;   // Kodik — ключ не нужен; BYOK — только после проверки ключа
+            sel.disabled = !ok;
+            sel.style.opacity = ok ? '1' : '0.5';
+            sel.title = ok ? '' : 'Сначала проверьте ключ';
+        }
         async function verifyApiKey() {
             const key = el('apikey').value.trim();
             const status = el('keyStatus');
+            _keyValid = false; updateModelGate();
             if (!key) { status.style.display = 'none'; return; }
             status.style.display = 'block';
-            status.innerHTML = '<span style="color:var(--ash)">Проверяю ключ...</span>';
+            status.style.color = 'var(--ash)';
+            status.innerHTML = `${SVG.spin}Проверяю ключ…`;
             try {
                 const res = await fetch('/api/verify', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({key: key})
+                    body: JSON.stringify({ key: key, provider: _providerFromMode() })
                 });
                 const data = await res.json();
                 if (data.valid) {
-                    status.innerHTML = `<span style="color:#4ad07a">✓ Ключ действителен · ${data.models_count} моделей доступно</span>`;
+                    _keyValid = true;
+                    status.style.color = '#4ad07a';
+                    status.innerHTML = `${SVG.check}Ключ рабочий · ${data.models_count} моделей · можно выбирать модель`;
                     localStorage.setItem('superpromt_api_key', key);
-                    markMode();
+                    if (typeof markMode === 'function') markMode();
                 } else {
-                    status.innerHTML = `<span style="color:#e5484d">✗ ${data.error || 'Неверный ключ'}</span>`;
+                    status.style.color = '#e5484d';
+                    status.innerHTML = `${SVG.cross}${esc(data.error || 'Неверный ключ')}`;
                 }
-            } catch(e) {
-                status.innerHTML = `<span style="color:#e5484d">✗ Ошибка проверки</span>`;
+            } catch (e) {
+                status.style.color = '#e5484d';
+                status.innerHTML = `${SVG.cross}Ошибка проверки`;
             }
+            updateModelGate();
         }
 
         function saveModel() {
@@ -3256,6 +3282,18 @@
 
         // ─── Живые цены OpenRouter + счётчик расхода ───
         let _orModels = [];
+        let _keyValid = false;
+        // SVG-иконки в линейном стиле сайта (без эмодзи)
+        const _svg = (p) => `<svg viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-2px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;margin-right:4px">${p}</svg>`;
+        const SVG = {
+            coin:    _svg('<circle cx="12" cy="12" r="9"/><path d="M14.4 9.2c-.5-.8-1.4-1.2-2.4-1.2-1.4 0-2.5.8-2.5 1.9 0 2.5 5 1.3 5 3.9 0 1.1-1.1 1.9-2.5 1.9-1.1 0-2-.4-2.5-1.2M12 6.7v10.6"/>'),
+            cube:    _svg('<path d="M12 2 3 7v10l9 5 9-5V7z"/><path d="M3 7l9 5 9-5M12 22V12"/>'),
+            chart:   _svg('<path d="M12 20V10M18 20V4M6 20v-4"/>'),
+            receipt: _svg('<path d="M6 2h12v20l-2.5-1.6L13 22l-2.5-1.6L8 22l-2.5-1.6L6 22z"/><path d="M9 8h6M9 12h6"/>'),
+            check:   _svg('<path d="M20 6 9 17l-5-5"/>'),
+            cross:   _svg('<path d="M18 6 6 18M6 6l12 12"/>'),
+            spin:    `<svg viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-2px;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;margin-right:4px"><path d="M12 3a9 9 0 1 0 9 9" opacity=".9"><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.7s" repeatCount="indefinite"/></path></svg>`
+        };
         function fmtPrice(pt) {
             if (pt == null) return '—';
             const per = pt * 1e6;
@@ -3270,10 +3308,10 @@
                 if (!_orModels.length || !sel) { updateModelPrice(); return; }
                 const saved = localStorage.getItem('superpromt_model') || '';
                 const groups = [
-                    ['free',      '🆓 Бесплатные'],
-                    ['cheap',     '💚 Дешёвые (до $1/1М)'],
-                    ['mid',       '💛 Средние ($1–5/1М)'],
-                    ['expensive', '🔴 Дорогие (>$5/1М)']
+                    ['free',      'Бесплатные'],
+                    ['cheap',     'Дешёвые (до $1/1М)'],
+                    ['mid',       'Средние ($1–5/1М)'],
+                    ['expensive', 'Дорогие (>$5/1М)']
                 ];
                 let html = '';
                 for (const [seg, label] of groups) {
@@ -3299,9 +3337,9 @@
             const mode = localStorage.getItem('superpromt_run_mode') || 'kodik';
             if (mode === 'openai') {
                 // прямой OpenAI-совместимый API: цена провайдера неизвестна — показываем модель и контекст
-                badge.innerHTML = `🧩 Модель: <b>${esc(m.name)}</b>${ctx}`;
+                badge.innerHTML = `${SVG.cube}Модель: <b>${esc(m.name)}</b>${ctx}`;
             } else {
-                badge.innerHTML = `💲 Живая цена: ввод <b>${fmtPrice(m.prompt_price)}</b> · вывод <b>${fmtPrice(m.completion_price)}</b> за 1М токенов${ctx}`;
+                badge.innerHTML = `${SVG.coin}Живая цена: ввод <b>${fmtPrice(m.prompt_price)}</b> · вывод <b>${fmtPrice(m.completion_price)}</b> за 1М токенов${ctx}`;
             }
         }
         function renderSpend() {
@@ -3309,7 +3347,7 @@
             const total = parseFloat(localStorage.getItem('superpromt_spend') || '0');
             const n = parseInt(localStorage.getItem('superpromt_builds') || '0');
             bar.innerHTML = n
-                ? `📊 Расход за сессию: <b>≈$${total.toFixed(4)}</b> · сборок: ${n} · <a href="#" onclick="resetSpend(event)" style="opacity:.75">сброс</a>`
+                ? `${SVG.chart}Расход за сессию: <b>≈$${total.toFixed(4)}</b> · сборок: ${n} · <a href="#" onclick="resetSpend(event)" style="opacity:.75">сброс</a>`
                 : '';
         }
         function resetSpend(e) {
@@ -3329,7 +3367,7 @@
             const n = parseInt(localStorage.getItem('superpromt_builds') || '0') + 1;
             localStorage.setItem('superpromt_spend', String(total));
             localStorage.setItem('superpromt_builds', String(n));
-            if (bc) bc.innerHTML = `💰 Стоимость сборки: <b>≈$${cost.toFixed(4)}</b>${tokens ? ` · ${tokens} токенов` : ''}`;
+            if (bc) bc.innerHTML = `${SVG.receipt}Стоимость сборки: <b>≈$${cost.toFixed(4)}</b>${tokens ? ` · ${tokens} токенов` : ''}`;
             renderSpend();
         }
 
@@ -3527,7 +3565,7 @@ Generated by SuperPromt`;
             const L = pipeLabels();
             el('pipeSteps').innerHTML = PIPE.map((p, i) => {
                 const st = done.includes(p.id) ? 'done' : (active === p.id ? 'run' : '');
-                const mark = done.includes(p.id) ? '✓' : (i + 1);
+                const mark = done.includes(p.id) ? "<svg viewBox='0 0 24 24' style='width:11px;height:11px;fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round'><path d='M20 6 9 17l-5-5'/></svg>" : (i + 1);
                 return `<div class="pipe-step ${st}"><span class="dot">${mark}</span>
                     <span class="pt">${L[p.id][0]}</span><span class="ps">${(meta && meta[p.id]) || L[p.id][1]}</span></div>`;
             }).join('');
@@ -3609,7 +3647,7 @@ Generated by SuperPromt`;
             // ВСЁ, что пришло от LLM (issues, имена файлов, паспорт), экранируем через esc() —
             // иначе крафт промта → HTML/скрипт в innerHTML → XSS (находка ревью).
             el('verifyChecks').innerHTML = (v.checks||[]).map(c =>
-                `<div class="verify-check"><span class="ck ${c.ok?'ok':'no'}">${c.ok?'✓':'✕'}</span>
+                `<div class="verify-check"><span class="ck ${c.ok?'ok':'no'}">${c.ok?SVG.check:SVG.cross}</span>
                  <span>${esc(c.name)}${c.note?` — <span style="opacity:.7">${esc(c.note)}</span>`:''}</span></div>`).join('');
             el('verifyIssues').innerHTML = (v.issues&&v.issues.length)
                 ? '<div style="font-size:.8rem;color:var(--ash);margin-bottom:.3rem">Замечания ревьюера:</div>' +

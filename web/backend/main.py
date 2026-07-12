@@ -469,34 +469,49 @@ async def get_models():
     except Exception as e:
         return {"models": [], "error": str(e)}
 
+# /models у OpenAI и DeepSeek ТРЕБУЕТ авторизации (401 при неверном ключе), у OpenRouter он
+# ПУБЛИЧНЫЙ — поэтому OpenRouter валидируем через приватный /key.
+_VERIFY_ENDPOINTS = {
+    "openai": "https://api.openai.com/v1/models",
+    "deepseek": "https://api.deepseek.com/models",
+}
+
+
+def _auth_json(url, key, timeout=12):
+    import urllib.request
+    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {key}"})
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return json.loads(resp.read())
+
+
 @app.post("/api/verify")
 async def verify_key(request: Request):
-    """Проверка API-ключа"""
+    """Реальная проверка API-ключа у выбранного провайдера.
+    Можно передать base_url для произвольного OpenAI-совместимого эндпоинта."""
     try:
         body = await request.json()
-        key = body.get("key", "")
+        key = (body.get("key") or "").strip()
         provider = body.get("provider", "openrouter")
-        
+        base_url = (body.get("base_url") or "").strip()
         if not key:
             return {"valid": False, "error": "Ключ не указан"}
-        
-        # Проверяем ключ через OpenRouter API
-        import urllib.request
-        import json
-        
-        req = urllib.request.Request(
-            "https://openrouter.ai/api/v1/models",
-            headers={"Authorization": f"Bearer {key}"}
-        )
-        resp = urllib.request.urlopen(req, timeout=10)
-        data = json.loads(resp.read())
-        
-        if "data" in data and len(data["data"]) > 0:
-            return {"valid": True, "provider": provider, "models_count": len(data["data"])}
-        else:
-            return {"valid": False, "error": "Неверный ключ"}
+
+        if not base_url and provider == "openrouter":
+            # приватный эндпоинт — 401 при неверном ключе (в отличие от публичного /models)
+            _auth_json("https://openrouter.ai/api/v1/key", key)
+            return {"valid": True, "provider": provider,
+                    "models_count": len(_or_fetch_models())}
+
+        url = (base_url.rstrip("/") + "/models") if base_url \
+            else _VERIFY_ENDPOINTS.get(provider, _VERIFY_ENDPOINTS["openai"])
+        data = _auth_json(url, key)
+        n = len(data.get("data", []) or [])
+        return {"valid": True, "provider": provider, "models_count": n}
     except Exception as e:
-        return {"valid": False, "error": str(e)}
+        msg = str(e)
+        if "401" in msg or "403" in msg or "Unauthorized" in msg:
+            msg = "Ключ отклонён провайдером (401/403)"
+        return {"valid": False, "error": msg[:200]}
 
 @app.post("/api/psq", response_model=PSQResponse)
 async def calculate_psq(req: PSQRequest):
