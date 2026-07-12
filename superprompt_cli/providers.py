@@ -176,7 +176,7 @@ def _chat_openai(prov, key, model, messages, tools, max_tokens, temperature,
               "args": _safe_args(tc["function"].get("arguments"))}
              for i, tc in enumerate(msg.get("tool_calls") or [])]
     return {"text": text, "tool_calls": calls, "usage": data.get("usage", {}),
-            "raw": msg}
+            "raw": msg, "finish_reason": ch.get("finish_reason")}
 
 
 def _chat_anthropic(prov, key, model, messages, tools, max_tokens, temperature,

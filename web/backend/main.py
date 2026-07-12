@@ -132,7 +132,8 @@ frontend_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../fron
 
 MAX_PROMPT_LENGTH = 5000
 GEN_MAX_TOKENS = 32000           # общий лимит токенов генерации (поднят против обрыва)
-PER_FILE_MAX_TOKENS = 16000      # бюджет НА КАЖДЫЙ файл при многопроходной генерации (HTML/CSS/JS)
+PER_FILE_MAX_TOKENS = 32000      # большой бюджет НА КАЖДЫЙ файл (DeepSeek принимает и стопается сам);
+                                 # + авто-продолжение при обрыве (finish_reason=length) — без усечений
 MULTIPASS_PROMPT_CHARS = 900     # промт длиннее → сложный сайт → генерировать по частям (по файлам)
 REVIEW_MAX_TOKENS = 700          # лимит токенов агента-ревьюера
 MAX_BUILD_CYCLES = 3             # ремонт-цикл: максимум проходов до PASS
@@ -852,11 +853,24 @@ def _gen_multipass(final_prompt, domain, skills_text, model, fast_model, cfg, fe
 
     def call(system, user, max_tok, mdl=None):
         nonlocal tokens
-        r = providers.chat(mdl or model, [{"role": "system", "content": system},
-                                          {"role": "user", "content": user}],
-                           max_tokens=max_tok, temperature=0.3, cfg=cfg, timeout=300)
-        tokens += (r.get("usage", {}) or {}).get("total_tokens", 0)
-        return r["text"]
+        m = mdl or model
+        msgs = [{"role": "system", "content": system},
+                {"role": "user", "content": user}]
+        parts = []
+        for _ in range(4):                    # исходный вызов + до 3 продолжений при обрыве по лимиту
+            r = providers.chat(m, msgs, max_tokens=max_tok, temperature=0.3, cfg=cfg, timeout=300)
+            tokens += (r.get("usage", {}) or {}).get("total_tokens", 0)
+            piece = r.get("text") or ""
+            parts.append(piece)
+            if r.get("finish_reason") != "length" or not piece.strip():
+                break
+            # ответ обрезан лимитом токенов → просим дописать РОВНО с места обрыва (без повторов/фенсов)
+            msgs = msgs + [{"role": "assistant", "content": piece},
+                           {"role": "user", "content":
+                            "Твой ответ оборвался по лимиту токенов. Продолжи РОВНО с места обрыва — "
+                            "без повторов, без пояснений, без новых ``` — просто продолжение кода "
+                            "до полного завершения файла."}]
+        return "".join(parts)
 
     # Проход 1 — ПОЛНЫЙ index.html
     if is_game:
