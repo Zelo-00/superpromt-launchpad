@@ -789,6 +789,31 @@ def _extract_block(text, langs=("html", "css", "javascript", "js")):
     return re.sub(r"^```[a-z]*\s*|\s*```$", "", (text or "").strip(), flags=re.I).strip()
 
 
+_IMAGE_RULES = """
+
+ИЗОБРАЖЕНИЯ И ВИЗУАЛ (критично — иначе картинки будут битыми, а сайт «пустым»):
+- ЗАПРЕЩЕНЫ мёртвые сервисы-плейсхолдеры: placekitten.com, lorempixel.com, placeimg.com,
+  via.placeholder.com, source.unsplash.com/random — они не работают, картинки будут битыми.
+- ПРЕДПОЧИТАЙ самодостаточные визуалы (работают офлайн и в ZIP): inline-SVG иллюстрации,
+  CSS-градиенты/паттерны как фон карточек и hero, эмодзи-акценты. Это надёжнее внешних картинок.
+- Если нужны именно ФОТО — только рабочие источники:
+  https://picsum.photos/seed/УНИКАЛЬНОЕ_СЛОВО/600/400 (любые фото, всегда доступно)
+  или https://cataas.com/cat?width=600&height=400 (котики).
+- КАЖДОМУ <img> задавай width/height (или aspect-ratio) и onerror-фолбэк, чтобы блок не ломался:
+  onerror="this.onerror=null;this.removeAttribute('src');this.style.background='linear-gradient(135deg,#ffd1dc,#c3a0f0)'"
+- Сделай КРАСИВО даже при расплывчатом запросе: продуманная палитра, отступы, сетка, аккуратные
+  тени и hover-переходы, адаптивность (mobile-first). Никаких пустых «рыбных» блоков.
+- КРАСИВЫЕ ШРИФТЫ: подключи пару Google Fonts через <link> в <head> (заголовки —
+  'Unbounded'/'Montserrat'/'Playfair Display'; текст — 'Inter'/'Manrope') с system-fallback,
+  задай их через CSS-переменные --font-head/--font-body.
+- АНИМАЦИИ, ПЕРЕХОДЫ, ЭФФЕКТЫ (обязательно, даже при расплывчатом запросе):
+  · Появление секций при скролле (fade-in/slide-up) через IntersectionObserver в js/app.js.
+  · Плавные переходы на hover (кнопки/карточки: подъём + тень + лёгкий scale), transition .2–.3s ease.
+  · Живой акцент в hero: анимированный градиент/парал­лакс через CSS @keyframes (аккуратно).
+  · Микро-детали: подчёркивания по hover, плавный скролл (scroll-behavior:smooth), fade у изображений.
+  · Уважай prefers-reduced-motion — отключай анимации для этого предпочтения."""
+
+
 def _gen_multipass(final_prompt, domain, skills_text, model, cfg, feedback="", is_game=False):
     """МНОГОПРОХОДНАЯ генерация ПО ФАЙЛАМ: index.html → css/style.css → js/app.js, каждый со СВОИМ
     полным бюджетом токенов (против обрыва). HTML передаётся контекстом в CSS/JS для связности.
@@ -819,7 +844,8 @@ def _gen_multipass(final_prompt, domain, skills_text, model, cfg, feedback="", i
                     "Правила: семантический HTML5; для КАЖДОЙ секции/элемента осмысленные class/id (их будут "
                     "стилизовать и оживлять); подключи <link rel=stylesheet href=\"css/style.css\"> в <head> и "
                     "<script src=\"js/app.js\"></script> перед </body>; внешние либы — через CDN. НЕ пиши CSS/JS "
-                    "инлайн (кроме мелких SVG). НЕ добавляй незапрошенных секций. Верни ОДИН блок ```html``` и всё.")
+                    "инлайн (кроме мелких SVG). НЕ добавляй незапрошенных секций. Верни ОДИН блок ```html``` и всё."
+                    + _IMAGE_RULES)
     html = _extract_block(call(html_sys, final_prompt + fb, PER_FILE_MAX_TOKENS), ("html",))
 
     # Проход 2 — ПОЛНЫЙ CSS под этот HTML
@@ -898,7 +924,7 @@ const app = {{...}}
 - ЦЕЛОСТНОСТЬ: каждый id/класс, на который ссылается JS или CSS, ДОЛЖЕН существовать в HTML,
   и наоборот — не ссылайся на несуществующие элементы.
 - СВЯЗНОСТЬ: index.html подключает css/style.css (<link>) и js/app.js (<script src>) — обязательно.
-- Каждая заявленная в задаче секция/форма/кнопка РЕАЛЬНО присутствует и рабочая."""
+- Каждая заявленная в задаче секция/форма/кнопка РЕАЛЬНО присутствует и рабочая.""" + _IMAGE_RULES
 
 
 def _produce_files(final_prompt, domain, skills_text, single_system, model, cfg, work_dir,
@@ -970,7 +996,11 @@ def _generate_sync(req: GenerateRequest):
             is_game = bool(re.search(r"\bигр\w*|\bgame\b|змейк|тетрис|арканоид|платформер|пинг-понг|"
                                      r"пинпонг|2048|судоку|викторин|крестики|сапёр|snake|tetris|arkanoid|"
                                      r"puzzle|канвас-игр|игровое поле", final_prompt, re.I))
-            complex_site = (is_game or len(final_prompt) > MULTIPASS_PROMPT_CHARS or
+            # ЛЮБОЙ сайт/лендинг → многопроход (каждый файл со своим бюджетом, без обрыва вывода)
+            is_site = bool(re.search(r"сайт|лендинг|лэндинг|landing|\bsite\b|\bpage\b|веб-страниц|"
+                                     r"портфолио|магазин|блог|галере|промо|визитк|одностраничн|"
+                                     r"статья|статью|эссе|лонгрид|документ|оглавлен|гайд|руководств|обзор", final_prompt, re.I))
+            complex_site = (is_game or is_site or len(final_prompt) > MULTIPASS_PROMPT_CHARS or
                             len(re.findall(r"секц|блок|hero|тариф|отзыв|футер|прайс|галере|раздел|"
                                            r"section|pricing|testimonial|footer|feature",
                                            final_prompt, re.I)) >= 3)

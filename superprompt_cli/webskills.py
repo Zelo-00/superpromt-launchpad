@@ -47,6 +47,133 @@ def load():
     return _cache
 
 
+# ── Детерминированные триггеры «подстрока в задаче → скилл» (быстро, без LLM) ──
+_SKILL_KW = {
+    "frontend-design": ["сайт", "лендинг", "лэндинг", "вёрст", "верст", "страниц", "ui",
+        "интерфейс", "типографик", "тёмн тем", "светл тем", "адаптив", "responsive",
+        "landing", "website", "site", "page", "hero", "навигац", "одностраничн", "промо",
+        "магазин", "shop", "портфолио", "блог", "визитк", "галере"],
+    "designer-skills": ["дизайн", "ux", "макет", "прототип", "редизайн", "дизайн-систем",
+        "бренд", "эстетик", "красив", "визуал", "стильн", "оформлен", "modern", "premium"],
+    "paper-shaders": ["шейдер", "градиент", "живой фон", "анимированн фон", "webgl",
+        "hero-фон", "параллакс", "glass", "стекл", "неон", "свеч", "glow", "блик", "aurora"],
+    "lottie-animation": ["анимац", "animation", "переход", "transition", "микроинтеракц",
+        "лоадер", "loader", "анимированн иконк", "появлен", "hover", "motion", "оживи", "эффект"],
+    "frontend-slides": ["презентац", "слайд", "доклад", "питч", "pitch", "deck", "slides"],
+    "mermaid-diagrams": ["диаграмм", "флоучарт", "flowchart", "er-диаграм", "gantt", "mermaid",
+        "блок-схем", "схему процесс", "архитектурн схем"],
+    "chartjs-dashboard": ["дашборд", "dashboard", "график", "kpi", "метрик", "аналитик",
+        "chart", "визуализац данн", "статистик", "отчётн панел"],
+    "designing-operational-dashboards": ["операционн дашборд", "мониторинг", "observability",
+        "алерт", "sre", "incident", "grafana"],
+    "react-native": ["react native", "react-native", "expo", "мобильн приложен", "ios",
+        "android", "апк", "мобильное приложение"],
+    "react-components": ["react", "компонент react", "хук", "jsx", "tsx", "next.js", "nextjs"],
+    "godot": ["игр", "game", "godot", "платформер", "геймплей", "спрайт", "аркад", "змейк",
+        "snake", "тетрис", "tetris", "2048", "крестики", "пинг-понг", "пинпонг", "судоку",
+        "сапёр", "уровень игр"],
+    "math-orchestr": ["математик", "доказательств", "теорем", "статистик", "ml-исслед",
+        "research", "научн стат", "формул"],
+    "knowledge-work": ["финанс", "юридическ", "договор", "продаж", "маркетинг", "офисн",
+        "отчёт для", "письмо клиент", "бизнес-план", "стратег", "коммерческ предложен",
+        "статья", "статью", "эссе", "оглавлен", "лонгрид", "блог-пост", "гайд", "руководств",
+        "реферат", "конспект", "обзор", "напиши текст", "документ"],
+    "writing-product-requirements-docs": ["prd", "требован к продукт", "product requirements",
+        "спецификац продукт", "user stor"],
+    "fastapi-backend": ["fastapi", "python-бэкенд", "питон-бэкенд", "питон api", "бэкенд на python"],
+    "express-node-backend": ["express", "node.js", "nodejs", "node-бэкенд", "бэкенд на node"],
+    "rest-api-design": ["rest", "эндпоинт", "endpoint", "пагинац", "api-дизайн", "openapi"],
+    "sql-postgres": ["sql", "postgres", "postgresql", "база данных", "схема таблиц", "индекс бд", "n+1"],
+    "migrating-databases-2": ["миграц бд", "db migration", "alembic", "liquibase", "flyway"],
+    "auth-jwt": ["логин", "авторизац", "jwt", "сесси", "аутентификац", "oauth", "роли доступ"],
+    "input-validation-security": ["xss", "инъекц", "csrf", "санитизац", "валидац ввод", "защит форм"],
+    "env-secrets-config": ["секрет", ".env", "конфиг окружен", "переменн окружен"],
+    "validating-environment-secrets": ["проверк секрет", "валидац env", "утечк секрет"],
+    "docker-deploy": ["docker", "контейнер", "dockerfile", "деплой в контейнер"],
+    "composing-docker-services": ["docker compose", "docker-compose", "compose-файл", "мультиконтейнер"],
+    "api-testing": ["pytest", "e2e", "автотест", "api-тест", "тестировани api", "unit-тест"],
+    "writing-runbooks-2": ["ранбук", "runbook", "операционн процедур"],
+    "running-technology-evaluations": ["выбор технолог", "сравнени технолог", "какой стек"],
+    "managing-git-dag-branches": ["git", "ветк", "rebase", "merge-конфликт"],
+    "onboarding-codebase": ["вход в чужой код", "onboarding в код", "legacy-код", "разобрат в проект"],
+    "onboarding-design-system-2": ["дизайн-систем", "компонентн библиотек", "storybook"],
+    "automating-workspace-workflows": ["автоматизац рабоч", "workflow-автоматизац"],
+    "executing-development-workflows": ["dev workflow", "процесс разработк"],
+}
+# признаки веб/визуальной задачи → базовый буст визуальному ядру (даже без прямых слов)
+_WEB_HINT = ["сайт", "лендинг", "страниц", "landing", "site", "page", "website", "веб",
+             "промо", "портфолио", "магазин", "shop", "галере", "блог", "визитк"]
+
+
+def _rank_keywords(task, items, k):
+    """Детерминированный ранкер: подстроки-триггеры + буст визуального ядра для веб-задач."""
+    t = " " + (task or "").lower() + " "
+    names = {s["name"] for s in items}
+    score = {}
+    for name, kws in _SKILL_KW.items():
+        if name not in names:
+            continue
+        hits = sum(1 for kw in kws if kw in t)
+        if hits:
+            score[name] = score.get(name, 0) + hits * 2
+    if any(h in t for h in _WEB_HINT):
+        for name, boost in (("frontend-design", 5), ("designer-skills", 2),
+                            ("paper-shaders", 2), ("lottie-animation", 2)):
+            if name in names:
+                score[name] = score.get(name, 0) + boost
+    # даже если ничего не совпало — не возвращаем пусто и НЕ уходим в галлюцинирующий LLM:
+    # ниже добьём детерминированно из PRIORITY (осмысленные методологии).
+    pri = {n: i for i, n in enumerate(PRIORITY)}
+    ranked = sorted(score.items(), key=lambda kv: (-kv[1], pri.get(kv[0], len(PRIORITY))))
+    by_name = {s["name"]: s for s in items}
+    result = [{"name": n, "text": by_name[n]["body"], "desc": by_name[n].get("desc", "")}
+              for n, _ in ranked]
+    if len(result) < 5:                     # добить минимум 5 «насыщенными» методологиями (PRIORITY), не шумом
+        have = {r["name"] for r in result}
+        for name in PRIORITY:
+            if len(result) >= 5:
+                break
+            if name in by_name and name not in have:
+                have.add(name)
+                result.append({"name": name, "text": by_name[name]["body"],
+                               "desc": by_name[name].get("desc", "")})
+    return result[:max(k, 5)]
+
+
+def _rank_llm_constrained(task, candidates, k, model, cfg):
+    """LLM упорядочивает k лучших СТРОГО из детерминированного шортлиста — без галлюцинаций:
+    любое имя вне шортлиста отбрасывается, недостача добивается детерминированным порядком."""
+    try:
+        from . import providers
+        catalog = "\n".join(f"- {c['name']}: {(c.get('desc') or '')[:140]}" for c in candidates)
+        prompt = (
+            "Ты — tech lead. Упорядочь по релевантности задаче ЛУЧШИЕ скиллы СТРОГО из списка "
+            f"ниже. Использовать ТОЛЬКО имена из списка, ничего не выдумывать.\n\n"
+            f"ЗАДАЧА: {task}\n\nСПИСОК (только эти имена разрешены):\n{catalog}\n\n"
+            f"Верни ТОЛЬКО JSON-массив из {max(k, 5)} имён из списка, по убыванию релевантности.")
+        r = providers.chat(model, [{"role": "user", "content": prompt}],
+                           max_tokens=200, temperature=0.0, cfg=cfg, timeout=30)
+        m = re.search(r"\[.*?\]", r["text"], re.S)
+        if not m:
+            return []
+        picked = json.loads(m.group(0))
+        by_name = {c["name"]: c for c in candidates}
+        seen, out = set(), []
+        for name in picked:
+            if name in by_name and name not in seen:        # анти-галлюцинация: только из шортлиста
+                seen.add(name)
+                out.append(by_name[name])
+        for c in candidates:                                 # добить детерминированным порядком
+            if len(out) >= max(k, 5):
+                break
+            if c["name"] not in seen:
+                seen.add(c["name"])
+                out.append(c)
+        return out[:max(k, 5)]
+    except Exception:                                        # noqa: BLE001 — фолбэк на детерминированный
+        return []
+
+
 def rank(task, k=5, model=None, cfg=None):
     """LLM-based ранжирование: судья выбирает МИНИМУМ 5 скиллов, отсортированных по
     релевантности ПО НИСХОДЯЩЕЙ, с приоритетом самых насыщенных (глубокие методологии:
@@ -55,6 +182,16 @@ def rank(task, k=5, model=None, cfg=None):
     if not items:
         return []
     k = max(k, 5)                      # политика: на одну задачу — минимум 5 скиллов
+
+    # Детерминированный шортлист по ключевым словам (RU-запрос → EN-скиллы, без галлюцинаций).
+    # Если задан model — LLM уточняет порядок СТРОГО внутри шортлиста (выдумать нельзя).
+    cand = _rank_keywords(task, items, max(2 * k, 10))
+    if cand:
+        if model:
+            refined = _rank_llm_constrained(task, cand, k, model, cfg)
+            if refined:
+                return refined
+        return cand[:max(k, 5)]
 
     # If no model provided, use TF-IDF fallback
     if not model:
