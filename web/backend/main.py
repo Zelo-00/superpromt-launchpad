@@ -850,7 +850,10 @@ _IMAGE_RULES = """
   · Уважай prefers-reduced-motion — отключай анимации для этого предпочтения.
 - ВНЕШНИЕ БИБЛИОТЕКИ (Chart.js и подобные): подключай в <head> БЕЗ атрибута defer; код, который
   их использует, оборачивай в window.addEventListener('load', ...) и перед использованием проверяй,
-  что объект (напр. Chart) определён — иначе будет «Chart is not defined» и график не отрисуется."""
+  что объект (напр. Chart) определён — иначе будет «Chart is not defined» и график не отрисуется.
+- МНОГОСТРАНИЧНЫЙ сайт делай как SPA в ОДНОМ index.html: «страницы» — это секции, переключаемые
+  через JS (data-page + класс active), БЕЗ отдельных .html-файлов и БЕЗ ссылок вида href="about.html"
+  (таких файлов НЕ будет — ссылки станут битыми). Меню меняет активную секцию, а не грузит страницу."""
 
 
 def _gen_multipass(final_prompt, domain, skills_text, model, fast_model, cfg, feedback="", is_game=False):
