@@ -1413,6 +1413,8 @@
                         <option value="openai/deepseek/deepseek-v4-flash">DeepSeek V4 Flash (low)</option>
                         <option value="openai/qwen/qwen3.6-max-preview">Qwen3.6 Max Preview (high)</option>
                     </select>
+                    <div id="modelPrice" class="khint" style="margin-top:.35rem"></div>
+                    <div id="spendBar" class="khint" style="margin-top:.35rem"></div>
                     <div class="sdiv"></div>
                     <h4 data-i18n="settings_mode">Режим прогона</h4>
                     <div class="mode-select">
@@ -1530,6 +1532,7 @@
                     <div class="card">
                         <span class="eyebrow" data-i18n="agentCheck">Agent Review</span>
                         <h3><span id="verdictBadge" class="verdict-badge"></span> <span data-i18n="verifyTitle">Проверка агентами</span></h3>
+                        <div id="buildCost" class="khint" style="margin:.2rem 0 .5rem"></div>
                         <div id="verifySummary" class="verify-summary"></div>
                         <div id="verifyChecks" class="verify-checks"></div>
                         <div id="verifyIssues" class="verify-issues"></div>
@@ -3205,6 +3208,8 @@
             setRunMode(mode);
             const model = localStorage.getItem('superpromt_model') || 'openai/qwen/qwen3-coder-next';
             if (el('modelSelect')) el('modelSelect').value = model;
+            populateModels();
+            renderSpend();
             markMode();
             if (key) verifyApiKey();
         }
@@ -3237,6 +3242,68 @@
         function saveModel() {
             const model = el('modelSelect').value;
             localStorage.setItem('superpromt_model', model);
+            updateModelPrice();
+        }
+
+        // ─── Живые цены OpenRouter + счётчик расхода ───
+        let _orModels = [];
+        function fmtPrice(pt) {
+            if (pt == null) return '—';
+            const per = pt * 1e6;
+            return per >= 0.01 ? '$' + per.toFixed(2) : '$' + per.toFixed(4);
+        }
+        async function populateModels() {
+            try {
+                const res = await fetch('/api/or-models');
+                const data = await res.json();
+                _orModels = data.models || [];
+                const sel = el('modelSelect');
+                if (!_orModels.length || !sel) { updateModelPrice(); return; }
+                const saved = localStorage.getItem('superpromt_model') || '';
+                sel.innerHTML = _orModels.map(m =>
+                    `<option value="openrouter/${m.id}">${esc(m.name)} (${fmtPrice(m.prompt_price)}/${fmtPrice(m.completion_price)} за 1М)</option>`
+                ).join('');
+                if (_orModels.some(m => 'openrouter/' + m.id === saved)) sel.value = saved;
+                else localStorage.setItem('superpromt_model', sel.value);
+                updateModelPrice();
+            } catch (e) { updateModelPrice(); }
+        }
+        function updateModelPrice() {
+            const sel = el('modelSelect'), badge = el('modelPrice');
+            if (!badge || !sel) return;
+            const id = (sel.value || '').replace(/^openrouter\//, '');
+            const m = _orModels.find(x => x.id === id);
+            if (!m) { badge.textContent = ''; return; }
+            const ctx = m.ctx ? ` · контекст ${Math.round(m.ctx / 1000)}K` : '';
+            badge.innerHTML = `💲 Живая цена: ввод <b>${fmtPrice(m.prompt_price)}</b> · вывод <b>${fmtPrice(m.completion_price)}</b> за 1М токенов${ctx}`;
+        }
+        function renderSpend() {
+            const bar = el('spendBar'); if (!bar) return;
+            const total = parseFloat(localStorage.getItem('superpromt_spend') || '0');
+            const n = parseInt(localStorage.getItem('superpromt_builds') || '0');
+            bar.innerHTML = n
+                ? `📊 Расход за сессию: <b>≈$${total.toFixed(4)}</b> · сборок: ${n} · <a href="#" onclick="resetSpend(event)" style="opacity:.75">сброс</a>`
+                : '';
+        }
+        function resetSpend(e) {
+            if (e) e.preventDefault();
+            localStorage.setItem('superpromt_spend', '0');
+            localStorage.setItem('superpromt_builds', '0');
+            renderSpend();
+            const bc = el('buildCost'); if (bc) bc.textContent = '';
+        }
+        function addSpend(cost, tokens) {
+            const bc = el('buildCost');
+            if (cost == null) {
+                if (bc) bc.innerHTML = tokens ? `${tokens} токенов · стоимость недоступна (нет цены модели)` : '';
+                return;
+            }
+            const total = parseFloat(localStorage.getItem('superpromt_spend') || '0') + cost;
+            const n = parseInt(localStorage.getItem('superpromt_builds') || '0') + 1;
+            localStorage.setItem('superpromt_spend', String(total));
+            localStorage.setItem('superpromt_builds', String(n));
+            if (bc) bc.innerHTML = `💰 Стоимость сборки: <b>≈$${cost.toFixed(4)}</b>${tokens ? ` · ${tokens} токенов` : ''}`;
+            renderSpend();
         }
 
         function markMode() {
@@ -3460,9 +3527,10 @@ Generated by SuperPromt`;
             el('buildSection').scrollIntoView({ behavior:'smooth', block:'start' });
             animatePipe([], {});
             try {
+                const _selModel = localStorage.getItem('superpromt_model') || undefined;
                 const res = await fetch('/api/generate', {
                     method:'POST', headers:{'Content-Type':'application/json'},
-                    body: JSON.stringify({ prompt, tier:'min' })
+                    body: JSON.stringify({ prompt, tier:'min', model:_selModel })
                 });
                 clearInterval(_pipeTimer);
                 if (!res.ok) {
@@ -3492,6 +3560,7 @@ Generated by SuperPromt`;
         let _genId = null, _editFiles = [], _editIdx = 0;
         function renderBuild(d) {
             el('buildOutput').classList.remove('hidden');
+            addSpend(d.cost_usd != null ? d.cost_usd : null, d.tokens != null ? d.tokens : null);
             // gen_id из preview_url (/api/preview/<id>/index.html) — для редактора
             _genId = d.preview_url ? d.preview_url.split('/')[3] : null;
             el('editToggle').style.display = _genId ? '' : 'none';
