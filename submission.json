@@ -11,7 +11,7 @@
     "presentation": "https://github.com/Zelo-00/superpromt-launchpad/blob/main/docs/SuperPromt_%D0%A1%D1%82%D0%B0%D1%82%D1%8C%D1%8F.docx",
     "repository": "https://github.com/Zelo-00/superpromt-launchpad",
     "readme": "https://github.com/Zelo-00/superpromt-launchpad/blob/main/README.md",
-    "demo": "http://193.39.208.35:8000"
+    "demo": "https://superpromt.site"
   },
 
   "notes": "Стек: Python 3.12, FastAPI, Pydantic, Uvicorn, ванильный SPA (HTML/CSS/JS), SQLite, Docker, OpenAI-совместимый шлюз (BYOK).
