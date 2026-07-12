@@ -1418,9 +1418,9 @@
                     <div class="sdiv"></div>
                     <h4 data-i18n="settings_mode">Режим прогона</h4>
                     <div class="mode-select">
-                        <div class="mi active" id="mode-kodik" onclick="setRunMode('kodik')">
+                        <div class="mi active" id="mode-default" onclick="setRunMode('default')">
                             <div class="d"></div>
-                            <span data-i18n="mode_kodik">Через Kodik — сразу результат</span>
+                            <span data-i18n="mode_default">Базовый режим — сразу результат</span>
                         </div>
                         <div class="mi" id="mode-openrouter" onclick="setRunMode('openrouter')">
                             <div class="d"></div>
@@ -1898,7 +1898,7 @@
                 settings_api_key: "Ключ API · BYOK",
                 settings_hint: "Без ключа — <b>базовый</b> режим. С ключом — <b>полноценный</b> прогон задачи.",
                 settings_mode: "Режим прогона",
-                mode_kodik: "Через Kodik — сразу результат",
+                mode_default: "Базовый режим — сразу результат",
                 mode_or: "Свой ключ (OpenRouter)",
                 mode_openai: "Свой ключ — прямой API (OpenAI-совместимый)",
                 hero_title: "Опиши задачу — <b>получи готовый результат</b>",
@@ -1987,7 +1987,7 @@
                 settings_api_key: "API Key · BYOK",
                 settings_hint: "No key — <b>demo</b> result. With key — <b>real</b> task run.",
                 settings_mode: "Run Mode",
-                mode_kodik: "Via Kodik — instant result",
+                mode_default: "Basic mode — instant result",
                 mode_or: "Own key (OpenRouter)",
                 mode_openai: "Own key — direct API (OpenAI-compatible)",
                 hero_title: "Describe task — <b>get ready result</b>",
@@ -3206,7 +3206,8 @@
 
         function setRunMode(mode) {
             if (mode === 'byok') mode = 'openrouter';          // миграция старого значения
-            if (!el(`mode-${mode}`)) mode = 'kodik';           // защита от неизвестного режима
+            if (mode === 'kodik') mode = 'default';            // миграция старого режима Kodik
+            if (!el(`mode-${mode}`)) mode = 'default';         // защита от неизвестного режима
             localStorage.setItem('superpromt_run_mode', mode);
             document.querySelectorAll('.mi').forEach(m => m.classList.remove('active'));
             el(`mode-${mode}`).classList.add('active');
@@ -3218,7 +3219,7 @@
         function loadSettings() {
             const key = localStorage.getItem('superpromt_api_key') || '';
             el('apikey').value = key;
-            const mode = localStorage.getItem('superpromt_run_mode') || 'kodik';
+            const mode = localStorage.getItem('superpromt_run_mode') || 'default';
             setRunMode(mode);
             const model = localStorage.getItem('superpromt_model') || 'openai/qwen/qwen3-coder-next';
             if (el('modelSelect')) el('modelSelect').value = model;
@@ -3230,14 +3231,14 @@
         }
 
         function _providerFromMode() {
-            const mode = localStorage.getItem('superpromt_run_mode') || 'kodik';
+            const mode = localStorage.getItem('superpromt_run_mode') || 'default';
             return mode === 'openai' ? 'openai' : 'openrouter';   // прямой API проверяем как OpenAI-совместимый
         }
         function updateModelGate() {
             const sel = el('modelSelect');
             if (!sel) return;
-            const mode = localStorage.getItem('superpromt_run_mode') || 'kodik';
-            const ok = (mode === 'kodik') || _keyValid;   // Kodik — ключ не нужен; BYOK — только после проверки ключа
+            const mode = localStorage.getItem('superpromt_run_mode') || 'default';
+            const ok = (mode === 'default') || _keyValid;   // базовый — ключ не нужен; BYOK — только после проверки ключа
             sel.disabled = !ok;
             sel.style.opacity = ok ? '1' : '0.5';
             sel.title = ok ? '' : 'Сначала проверьте ключ';
@@ -3334,7 +3335,7 @@
             const m = _orModels.find(x => x.id === id);
             if (!m) { badge.textContent = ''; return; }
             const ctx = m.ctx ? ` · контекст ${Math.round(m.ctx / 1000)}K` : '';
-            const mode = localStorage.getItem('superpromt_run_mode') || 'kodik';
+            const mode = localStorage.getItem('superpromt_run_mode') || 'default';
             if (mode === 'openai') {
                 // прямой OpenAI-совместимый API: цена провайдера неизвестна — показываем модель и контекст
                 badge.innerHTML = `${SVG.cube}Модель: <b>${esc(m.name)}</b>${ctx}`;
