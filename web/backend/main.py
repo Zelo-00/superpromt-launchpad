@@ -444,6 +444,23 @@ async def or_models(per_segment: int = 20):
             "segments": {k: len(v) for k, v in buckets.items()}}
 
 
+@app.get("/api/gen-models")
+async def gen_models():
+    """Модели генерации, доступные НА СЕРВЕРЕ (по настроенным провайдерам).
+    Сейчас — DeepSeek flash/pro, если задан ключ DEEPSEEK_API_KEY."""
+    out = []
+    if os.environ.get("DEEPSEEK_API_KEY"):
+        out += [
+            {"id": "deepseek/deepseek-v4-flash", "name": "DeepSeek V4 Flash",
+             "hint": "быстро и дёшево", "segment": "server",
+             "ctx": None, "prompt_price": None, "completion_price": None},
+            {"id": "deepseek/deepseek-v4-pro", "name": "DeepSeek V4 Pro",
+             "hint": "максимум качества", "segment": "server",
+             "ctx": None, "prompt_price": None, "completion_price": None},
+        ]
+    return {"models": out}
+
+
 @app.get("/api/models")
 async def get_models():
     """Список доступных моделей для BYOK"""

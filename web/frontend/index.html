@@ -3302,28 +3302,34 @@
         }
         async function populateModels() {
             try {
-                const res = await fetch('/api/or-models');
-                const data = await res.json();
-                _orModels = data.models || [];
+                let server = [], or = [];
+                try { server = ((await (await fetch('/api/gen-models')).json()).models) || []; } catch (e) {}
+                try { or = ((await (await fetch('/api/or-models')).json()).models) || []; } catch (e) {}
+                _orModels = server.concat(or);
                 const sel = el('modelSelect');
                 if (!_orModels.length || !sel) { updateModelPrice(); return; }
                 const saved = localStorage.getItem('superpromt_model') || '';
-                const groups = [
-                    ['free',      'Бесплатные'],
-                    ['cheap',     'Дешёвые (до $1/1М)'],
-                    ['mid',       'Средние ($1–5/1М)'],
-                    ['expensive', 'Дорогие (>$5/1М)']
-                ];
                 let html = '';
+                // серверные модели (DeepSeek flash/pro) — сверху; значение = полный id с провайдером
+                if (server.length) {
+                    html += '<optgroup label="Сервер (DeepSeek)">' + server.map(m =>
+                        `<option value="${m.id}">${esc(m.name)} · ${esc(m.hint || '')}</option>`
+                    ).join('') + '</optgroup>';
+                }
+                const groups = [
+                    ['free', 'Бесплатные'], ['cheap', 'Дешёвые (до $1/1М)'],
+                    ['mid', 'Средние ($1–5/1М)'], ['expensive', 'Дорогие (>$5/1М)']
+                ];
                 for (const [seg, label] of groups) {
-                    const items = _orModels.filter(m => m.segment === seg);
+                    const items = or.filter(m => m.segment === seg);
                     if (!items.length) continue;
                     html += `<optgroup label="${label}">` + items.map(m =>
                         `<option value="openrouter/${m.id}">${esc(m.name)} · ${fmtPrice(m.prompt_price)}/${fmtPrice(m.completion_price)} за 1М</option>`
                     ).join('') + '</optgroup>';
                 }
                 sel.innerHTML = html;
-                if (_orModels.some(m => 'openrouter/' + m.id === saved)) sel.value = saved;
+                const allValues = server.map(m => m.id).concat(or.map(m => 'openrouter/' + m.id));
+                if (allValues.includes(saved)) sel.value = saved;
                 else localStorage.setItem('superpromt_model', sel.value);
                 updateModelPrice();
             } catch (e) { updateModelPrice(); }
@@ -3336,7 +3342,9 @@
             if (!m) { badge.textContent = ''; return; }
             const ctx = m.ctx ? ` · контекст ${Math.round(m.ctx / 1000)}K` : '';
             const mode = localStorage.getItem('superpromt_run_mode') || 'default';
-            if (mode === 'openai') {
+            if (m.hint && m.prompt_price == null) {   // серверная модель (DeepSeek flash/pro)
+                badge.innerHTML = `${SVG.cube}Модель: <b>${esc(m.name)}</b> · ${esc(m.hint)}`;
+            } else if (mode === 'openai') {
                 // прямой OpenAI-совместимый API: цена провайдера неизвестна — показываем модель и контекст
                 badge.innerHTML = `${SVG.cube}Модель: <b>${esc(m.name)}</b>${ctx}`;
             } else {
