@@ -129,31 +129,48 @@ def _safe_args(s):
 
 def _chat_openai(prov, key, model, messages, tools, max_tokens, temperature,
                  timeout=300, json_mode=False):
-    body = {"model": model, "messages": messages,
-            "max_tokens": max_tokens, "temperature": temperature}
-    if tools:
-        body["tools"] = [{"type": "function", "function": t} for t in tools]
-    if json_mode and not tools:                   # структурный JSON у судьи (П.10)
-        body["response_format"] = {"type": "json_object"}
     url = prov["base_url"].rstrip("/") + "/chat/completions"
     headers = {"Authorization": "Bearer " + key, "Content-Type": "application/json"}
-    try:
-        data = _post(url, body, headers, timeout=timeout)
-    except ProviderError:
-        if "response_format" in body:             # эндпоинт не принял json-mode → без него
-            body.pop("response_format")
-            data = _post(url, body, headers, timeout=timeout)
-        else:
+
+    def _do(mt):
+        body = {"model": model, "messages": messages,
+                "max_tokens": mt, "temperature": temperature}
+        if tools:
+            body["tools"] = [{"type": "function", "function": t} for t in tools]
+        if json_mode and not tools:               # структурный JSON у судьи (П.10)
+            body["response_format"] = {"type": "json_object"}
+        try:
+            return _post(url, body, headers, timeout=timeout)
+        except ProviderError:
+            if "response_format" in body:         # эндпоинт не принял json-mode → без него
+                body.pop("response_format")
+                return _post(url, body, headers, timeout=timeout)
             raise
+
+    data = _do(max_tokens)
     # многие OpenAI-совместимые шлюзы отдают ОШИБКУ телом с кодом 200 → без "choices".
     # Валидируем структуру и бросаем ProviderError (её ловят вызывающие), а не роняем CLI.
     if not isinstance(data, dict) or not data.get("choices"):
         raise ProviderError("некорректный ответ провайдера: %.200s"
                             % str(data.get("error") if isinstance(data, dict) else data))
-    msg = data["choices"][0].get("message")
+    ch = data["choices"][0]
+    msg = ch.get("message")
     if not isinstance(msg, dict):
         raise ProviderError("ответ провайдера без message: %.200s" % str(data))
     text = msg.get("content") or ""
+    # reasoning-модели (напр. deepseek-v4-pro) пишут reasoning_content и могут исчерпать весь
+    # бюджет на размышления → content пустой при finish_reason=length. Докручиваем бюджет и
+    # повторяем ОДИН раз, чтобы такие модели работали на 100% в любом вызове.
+    if (not text.strip() and msg.get("reasoning_content")
+            and ch.get("finish_reason") == "length" and not tools):
+        bigger = min(max(max_tokens * 3, max_tokens + 4000), 32000)
+        if bigger > max_tokens:
+            data2 = _do(bigger)
+            if isinstance(data2, dict) and data2.get("choices"):
+                ch = data2["choices"][0]
+                msg = ch.get("message") or msg
+                text = msg.get("content") or text
+                data = data2
     calls = [{"id": tc.get("id", "call_%d" % i),
               "name": tc["function"]["name"],
               "args": _safe_args(tc["function"].get("arguments"))}
