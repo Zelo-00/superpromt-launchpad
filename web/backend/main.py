@@ -203,6 +203,7 @@ class GenerateRequest(BaseModel):
     prompt: str = Field(..., min_length=1, max_length=MAX_PROMPT_LENGTH)
     tier: str = Field(default="mid", description="min|mid|max")
     model: Optional[str] = Field(default=None, description="LLM model (provider/model)")
+    files: List[str] = Field(default_factory=list, description="id прикреплённых файлов (из /api/upload)")
 
 class GenerateResponse(BaseModel):
     answer: str
@@ -215,7 +216,7 @@ class GenerateResponse(BaseModel):
     files: List[Dict[str, Any]] = []
     archive_url: Optional[str] = None
     preview_url: Optional[str] = None    # /api/preview/<id>/index.html — живое превью сайта в iframe
-    verification: Optional[Dict[str, Any]] = None  # агентная проверка кода/результата (вместо KSCR)
+    verification: Optional[Dict[str, Any]] = None  # агентная проверка кода/результата (агентная проверка)
     tokens: Optional[int] = None                   # суммарно токенов за прогон
     cost_usd: Optional[float] = None               # ≈ оценка стоимости по live-ценам OpenRouter
 
@@ -631,7 +632,7 @@ async def get_skills(task: str):
         raise HTTPException(status_code=500, detail="Внутренняя ошибка при подборе скиллов.")
 
 def _verify_result(work_dir, files_created, prompt, model, cfg):
-    """АГЕНТНАЯ ПРОВЕРКА результата (вместо метрики KSCR): детерминированные чеки кода +
+    """АГЕНТНАЯ ПРОВЕРКА результата (агентная проверка): детерминированные чеки кода +
     LLM-агент-ревьюер. -> {verdict, checks:[{name,ok,note}], review, issues:[...]}."""
     import re
     checks = []
@@ -1015,9 +1016,89 @@ async def generate_code(req: GenerateRequest):
     return await asyncio.to_thread(_generate_sync, req)
 
 
+_IMAGE_EXT = (".png", ".jpg", ".jpeg", ".gif", ".webp")
+
+
+def _upload_path(fid):
+    """Диск-путь загруженного файла по id (или None)."""
+    import glob
+    fid = os.path.basename(str(fid)).split(".")[0]            # id без пути/расширения
+    m = glob.glob(os.path.join(UPLOAD_DIR, fid + ".*"))
+    return m[0] if m else None
+
+
+def _extract_upload_text(file_ids, max_total=30000):
+    """Текст из вложений-ДОКУМЕНТОВ (по id): txt/md/csv/json/py/js/html — напрямую; .docx —
+    zipfile; .pdf — pypdf; .xlsx/.xlsm — openpyxl. Картинки здесь НЕ обрабатываются — они идут
+    отдельным медиа-каналом (_collect_upload_images) и вставляются в сайт как <img>.
+    Возвращает единый текст для подмешивания в задачу LLM."""
+    parts, total = [], 0
+    for fid in (file_ids or [])[:MAX_FILES]:
+        path = _upload_path(fid)
+        if not path:
+            continue
+        ext = os.path.splitext(path)[1].lower()
+        name = os.path.basename(path)
+        if ext in _IMAGE_EXT:
+            continue
+        text = ""
+        try:
+            if ext in (".txt", ".md", ".csv", ".json", ".py", ".js", ".html"):
+                text = open(path, encoding="utf-8", errors="replace").read()
+            elif ext == ".docx":
+                import zipfile
+                with zipfile.ZipFile(path) as z:
+                    xml = z.read("word/document.xml").decode("utf-8", "replace")
+                text = re.sub(r"<[^>]+>", "", re.sub(r"</w:p>", "\n", xml))
+            elif ext == ".pdf":
+                import pypdf
+                text = "\n".join((p.extract_text() or "") for p in pypdf.PdfReader(path).pages[:30])
+            elif ext in (".xlsx", ".xlsm"):
+                import openpyxl
+                wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+                rows = []
+                for ws in wb.worksheets[:5]:
+                    rows.append("[лист: %s]" % ws.title)
+                    for r in ws.iter_rows(values_only=True):
+                        cells = [str(c) for c in r if c is not None]
+                        if cells:
+                            rows.append("\t".join(cells))
+                        if len(rows) > 400:
+                            break
+                text = "\n".join(rows)
+        except Exception as e:  # noqa: BLE001 — вложение опционально, не роняем генерацию
+            text = "[не удалось прочитать «%s»: %s]" % (name, str(e)[:80])
+        text = (text or "").strip()
+        if not text:
+            continue
+        chunk = text[:max(2000, max_total - total)]
+        parts.append("--- файл «%s» ---\n%s" % (name, chunk))
+        total += len(chunk)
+        if total >= max_total:
+            break
+    return "\n\n".join(parts)
+
+
+def _collect_upload_images(file_ids):
+    """Прикреплённые КАРТИНКИ (по id) → список медиа для вставки в сайт как <img>.
+    Возвращает [{'src': 'media/media-1.png', 'path': <диск>, 'ext': '.png'}].
+    Содержимое картинки не «читается» — файл копируется в вывод и показывается как медиа."""
+    out = []
+    for fid in (file_ids or [])[:MAX_FILES]:
+        path = _upload_path(fid)
+        if not path:
+            continue
+        ext = os.path.splitext(path)[1].lower()
+        if ext not in _IMAGE_EXT:
+            continue
+        n = len(out) + 1
+        out.append({"src": "media/media-%d%s" % (n, ext), "path": path, "ext": ext})
+    return out
+
+
 def _generate_sync(req: GenerateRequest):
     """Полный pipeline: PSQ → скиллы → генерация кода LLM → АГЕНТНАЯ ПРОВЕРКА → (ремонт-цикл до
-    результата) → архив. Веб-версия PSQ: без метрики KSCR — результат проверяют агенты."""
+    результата) → архив. Веб-версия PSQ: без отдельной метрики выхода — результат проверяют агенты."""
     try:
         _gc_previews()                       # сборка мусора старых превью/архивов (анти-утечка диска)
         # Генерацию ведёт code-специалист qwen3-coder-480b — идеальный для кода, стабильный
@@ -1054,6 +1135,30 @@ def _generate_sync(req: GenerateRequest):
             #      Сложный сайт (длинный промт / много секций) → МНОГОПРОХОДНАЯ генерация по файлам
             #      (каждый со своим бюджетом токенов — не обрезается); простой → быстрый одношот.
             base_user = final_prompt
+            # Прикреплённые пользователем файлы: извлекаем текст (документы/таблицы/pdf) и
+            # подмешиваем в задачу — чтобы содержимое РЕАЛЬНО учитывалось при генерации.
+            # Картинки идут пометкой (текстовая модель их не «видит»).
+            _attach_text = _extract_upload_text(req.files)
+            _attach_images = _collect_upload_images(req.files)
+            if _attach_text:
+                base_user = ("МАТЕРИАЛЫ, ПРИЛОЖЕННЫЕ ПОЛЬЗОВАТЕЛЕМ — это АВТОРИТЕТНЫЙ ИСТОЧНИК "
+                             "ДАННЫХ для задачи. Используй их содержимое ТОЧНО: все названия, цены, "
+                             "числа, даты, контакты, адреса переноси ДОСЛОВНО — без изменений, БЕЗ "
+                             "конвертации валют/единиц и БЕЗ выдумывания новых позиций. Включи ВСЕ "
+                             "пункты из материалов, ничего не отбрасывай. Оформление и текст-связку "
+                             "можешь придумать, но фактические данные бери только отсюда:\n" +
+                             _attach_text + "\n\n=== ЗАДАЧА ===\n" + base_user)
+            if _attach_images:
+                _img_lines = "\n".join(
+                    "  %d) <img src=\"%s\" alt=\"фото %d\"> — размести в галерее/hero/подходящей секции"
+                    % (i + 1, im["src"], i + 1) for i, im in enumerate(_attach_images))
+                base_user = base_user + (
+                    "\n\n=== ПРИЛОЖЕННЫЕ ИЗОБРАЖЕНИЯ (ОБЯЗАТЕЛЬНО вставь как полноценное медиа) ===\n"
+                    "Пользователь приложил %d фото. ОБЯЗАТЕЛЬНО покажи их на странице через теги "
+                    "<img> с ТОЧНО этими путями (файлы уже лежат рядом в папке media/):\n%s\n"
+                    "Не заменяй их на внешние картинки-заглушки (cataas/picsum) и не выдумывай другие "
+                    "пути — используй ровно указанные src. Для картинок задай CSS: max-width:100%%, "
+                    "height:auto, аккуратные рамки/скругления." % (len(_attach_images), _img_lines))
             # игра → всегда многопроход с ИГРОВЫМ JS-промптом (полная рабочая механика)
             is_game = bool(re.search(r"\bигр\w*|\bgame\b|змейк|тетрис|арканоид|платформер|пинг-понг|"
                                      r"пинпонг|2048|судоку|викторин|крестики|сапёр|snake|tetris|arkanoid|"
@@ -1073,6 +1178,15 @@ def _generate_sync(req: GenerateRequest):
             for _cycle in range(MAX_BUILD_CYCLES):
                 if _cycle > 0:
                     work_dir = tempfile.mkdtemp(prefix="spt_gen_")   # свежая папка на повтор
+                # приложенные картинки кладём в media/ ДО генерации и проверки, чтобы
+                # <img src="media/..."> прошёл link-чек ревьюера и попал в превью/архив
+                for im in _attach_images:
+                    dst = os.path.join(work_dir, im["src"])
+                    try:
+                        os.makedirs(os.path.dirname(dst), exist_ok=True)
+                        shutil.copy(im["path"], dst)
+                    except Exception:  # noqa: BLE001 — картинка опциональна
+                        pass
                 # ГИБРИД: генерация кода — целиком на быстром кодере (Flash). Reasoning-модели
                 # (Pro) для многофайлового кода не годятся: reasoning съедает бюджет → усечённый код.
                 # Pro применяется на точечных задачах («Улучшить промт»), где важно качество одного ответа.
@@ -1081,6 +1195,13 @@ def _generate_sync(req: GenerateRequest):
                     base_user, domain, skills_text, system, gen_model, gen_model, cfg, work_dir,
                     build_feedback, complex_site, is_game)
                 tokens_used += tok
+                # медиа-картинки уже на диске (media/) — регистрируем их в списке файлов ДО
+                # ревьюера, иначе link-чек посчитает <img src="media/..."> битой ссылкой
+                for im in _attach_images:
+                    fp = os.path.join(work_dir, im["src"])
+                    if os.path.exists(fp) and not any(f["path"] == im["src"] for f in files_created):
+                        files_created.append({"path": im["src"],
+                                              "size": os.path.getsize(fp), "kind": "image"})
                 # ГИБРИД: ревьюер на быстрой модели
                 verification = _verify_result(work_dir, files_created, req.prompt, settings.judge_model, cfg)
                 verification["cycles"] = _cycle + 1
@@ -1292,18 +1413,18 @@ async def save_edits(gen_id: str, req: EditSaveRequest):
         pass
     return {"ok": True, "saved": saved, "archive_url": f"/api/download/{archive_name}"}
 
-# --- Конкурсный режим: PSQ + Skills (веб-версия — БЕЗ метрики KSCR) ---
+# --- Конкурсный режим: PSQ + Skills (веб-версия — без отдельной метрики выхода) ---
 
 @app.post("/api/evaluate")
 async def evaluate_competition(req: GenerateRequest):
     """Async-обёртка: несколько sync-вызовов LLM → в поток (не блокировать event loop).
-    Примечание: в текущем фронте не используется; веб работает без метрики KSCR."""
+    Примечание: в текущем фронте не используется; веб работает без отдельной метрики выхода."""
     return await asyncio.to_thread(_evaluate_sync, req)
 
 
 def _evaluate_sync(req: GenerateRequest):
-    """Оценка задачи: PSQ + подбор скиллов. Веб-версия PSQ БЕЗ метрики KSCR
-    (правдивость результата проверяют агенты в /api/generate, а не KSCR-гейт)."""
+    """Оценка задачи: PSQ + подбор скиллов. Веб-версия PSQ без отдельной метрики выхода
+    (правдивость результата проверяют агенты в /api/generate, а не гейт выхода)."""
     try:
         model = req.model or settings.judge_model
         from superprompt_cli import config as spt_config
@@ -1491,7 +1612,8 @@ MAX_FILE_SIZE = 10 * 1024 * 1024   # 10 МБ на файл
 MAX_FILES = 10
 
 ALLOWED_UPLOAD_EXT = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".txt", ".md",
-                      ".pdf", ".json", ".csv", ".py", ".js", ".html", ".docx"}
+                      ".pdf", ".json", ".csv", ".py", ".js", ".html", ".docx",
+                      ".xlsx", ".xlsm"}
 
 @app.post("/api/upload")
 async def upload_files(files: List[UploadFile] = File(...)):
