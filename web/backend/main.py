@@ -665,16 +665,23 @@ def _verify_result(work_dir, files_created, prompt, model, cfg):
     review, issues, verdict = "", [], "PASS"
     # LLM-агент-ревьюер: смотрит реальный код и соответствие запросу
     try:
+        def _snip(text, cap=9000):
+            # длинные файлы: показываем НАЧАЛО и КОНЕЦ (структура + закрытие/финальные разделы),
+            # иначе ревьюер видит только начало длинного доклада → ложный «обрыв/нет разделов»
+            if len(text) <= cap:
+                return text
+            head = cap * 2 // 3
+            return text[:head] + "\n…[середина опущена]…\n" + text[-(cap - head):]
         code_snip = ""
         for f in files_created:
             p = os.path.join(work_dir, f["path"])
             if os.path.isfile(p) and f["path"].rsplit(".", 1)[-1] in ("html", "css", "js"):
                 code_snip += f"\n===== {f['path']} =====\n" + \
-                    open(p, encoding="utf-8", errors="replace").read()[:4000]
+                    _snip(open(p, encoding="utf-8", errors="replace").read())
         rev_prompt = (
             "Ты — придирчивый ревьюер-агент. Проверь, что сгенерированный проект РЕАЛЬНО "
             "выполняет запрос пользователя и не содержит грубых дефектов.\n\n"
-            f"ЗАПРОС ПОЛЬЗОВАТЕЛЯ:\n{prompt}\n\nКОД ПРОЕКТА:\n{code_snip[:12000]}\n\n"
+            f"ЗАПРОС ПОЛЬЗОВАТЕЛЯ:\n{prompt}\n\nКОД ПРОЕКТА:\n{code_snip[:40000]}\n\n"
             "Верни СТРОГО JSON: {\"verdict\":\"PASS\"|\"WARN\"|\"FAIL\", "
             "\"issues\":[\"кратко дефект 1\", ...], \"summary\":\"одно предложение\"}. "
             "PASS — запрос выполнен, критичных дефектов нет. WARN — работает, но есть недочёты. "
