@@ -57,8 +57,10 @@ def score(prompt, judge_model, cfg=None):
 
 
 def repair(task, model, cfg=None):
+    # 4096: у reasoning-моделей (напр. deepseek-v4-pro) большой reasoning_content съедает
+    # бюджет — при малом лимите content выходит пустым. Даём место под размышления + ответ.
     r = providers.chat(model, [{"role": "user", "content": REPAIR % task}],
-                       max_tokens=1500, temperature=0.3, cfg=cfg)
+                       max_tokens=4096, temperature=0.3, cfg=cfg)
     return r["text"].strip()
 
 

@@ -137,7 +137,8 @@ MULTIPASS_PROMPT_CHARS = 900     # промт длиннее → сложный 
 REVIEW_MAX_TOKENS = 700          # лимит токенов агента-ревьюера
 MAX_BUILD_CYCLES = 3             # ремонт-цикл: максимум проходов до PASS
 PREVIEW_TTL_SEC = 6 * 3600       # сколько живут served-превью до сборки мусора
-LLM_ENV_KEYS = ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GOOGLE_API_KEY")
+LLM_ENV_KEYS = ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GOOGLE_API_KEY",
+                "OPENROUTER_API_KEY", "DEEPSEEK_API_KEY", "NVIDIA_API_KEY", "GEMINI_API_KEY")
 
 
 def _has_llm() -> bool:
@@ -189,6 +190,7 @@ class StatsResponse(BaseModel):
 
 class RepairRequest(BaseModel):
     prompt: str = Field(..., min_length=1, max_length=MAX_PROMPT_LENGTH)
+    model: Optional[str] = None
 
 class RepairResponse(BaseModel):
     improved_text: str
@@ -328,7 +330,11 @@ async def repair_prompt(req: RepairRequest):
             )
         
         # sync-вызов LLM в поток — не блокировать event loop (находка ревью)
-        res = await asyncio.to_thread(psq.repair, req.prompt, settings.repair_model)
+        chosen = req.model or settings.repair_model
+        res = await asyncio.to_thread(psq.repair, req.prompt, chosen)
+        if not res.strip() and chosen != settings.repair_model:
+            # reasoning-модель не уместила ответ даже в увеличенный бюджет → фолбэк на серверную
+            res = await asyncio.to_thread(psq.repair, req.prompt, settings.repair_model)
         return {"improved_text": res}
     except HTTPException:
         raise

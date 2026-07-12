@@ -319,6 +319,7 @@
             justify-content: center;
         }
         .psq-score {
+            text-align: center;
             font-size: 3.2rem;
             font-weight: 800;
             line-height: 1;
@@ -330,8 +331,11 @@
         }
 
         .psq-gauge-svg {
-            width: 240px;
+            width: 100%;
+            max-width: 240px;
             height: auto;
+            display: block;
+            margin: 0 auto;
         }
 
         /* минималистичная шкала: цветовой диапазон + тонкая дуга значения + стрелка */
@@ -1331,7 +1335,7 @@
             .csp-tile { border-radius: 9px; border-width: 1px; }
             .csp-tile .id { font-size: .92rem; }
             .settings-dropdown { position: fixed; left: 1rem; right: 1rem; top: 72px; width: auto; }
-            .psq-gauge-svg { width: 200px; }
+            .psq-gauge-svg { max-width: 200px; }
             .psq-score { font-size: 2.5rem; margin-top: -.8rem; }
             .results-grid { gap: 1rem; }
             .card { border-radius: 14px; }
@@ -3143,10 +3147,13 @@
             el('error').classList.add('hidden');
 
             try {
+                const _rm = localStorage.getItem('superpromt_model') || '';
                 const res = await fetch('/api/repair', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ prompt })
+                    // модель шлём только для серверных deepseek/* (гарантированно есть ключ);
+                    // для OpenRouter без ключа — серверный REPAIR_MODEL по умолчанию
+                    body: JSON.stringify(_rm.startsWith('deepseek/') ? { prompt, model: _rm } : { prompt })
                 });
 
                 if (res.status === 503) {
