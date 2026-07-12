@@ -828,7 +828,10 @@ _IMAGE_RULES = """
   · Плавные переходы на hover (кнопки/карточки: подъём + тень + лёгкий scale), transition .2–.3s ease.
   · Живой акцент в hero: анимированный градиент/парал­лакс через CSS @keyframes (аккуратно).
   · Микро-детали: подчёркивания по hover, плавный скролл (scroll-behavior:smooth), fade у изображений.
-  · Уважай prefers-reduced-motion — отключай анимации для этого предпочтения."""
+  · Уважай prefers-reduced-motion — отключай анимации для этого предпочтения.
+- ВНЕШНИЕ БИБЛИОТЕКИ (Chart.js и подобные): подключай в <head> БЕЗ атрибута defer; код, который
+  их использует, оборачивай в window.addEventListener('load', ...) и перед использованием проверяй,
+  что объект (напр. Chart) определён — иначе будет «Chart is not defined» и график не отрисуется."""
 
 
 def _gen_multipass(final_prompt, domain, skills_text, model, cfg, feedback="", is_game=False):
@@ -888,6 +891,9 @@ def _gen_multipass(final_prompt, domain, skills_text, model, cfg, feedback="", i
         js_sys = ("Ты — expert JS-разработчик. Дан HTML-файл. Сгенерируй ТОЛЬКО js/app.js для нужной "
                   "интерактивности (обработчики, простое состояние, никаких фреймворков). Ссылайся ТОЛЬКО на "
                   "существующие в HTML id/class. Если интерактив не нужен — верни пустой блок. "
+                  "ВАЖНО: если код использует внешнюю библиотеку (Chart.js и т.п.) — весь такой код "
+                  "оборачивай в window.addEventListener('load', () => { ... }), чтобы библиотека успела "
+                  "загрузиться (иначе «Chart is not defined»). "
                   "Верни ОДИН блок ```javascript``` и всё.")
     js = _extract_block(call(js_sys, "HTML проекта:\n" + html[:16000], PER_FILE_MAX_TOKENS), ("javascript", "js"))
 
@@ -1016,7 +1022,9 @@ def _generate_sync(req: GenerateRequest):
             # ЛЮБОЙ сайт/лендинг → многопроход (каждый файл со своим бюджетом, без обрыва вывода)
             is_site = bool(re.search(r"сайт|лендинг|лэндинг|landing|\bsite\b|\bpage\b|веб-страниц|"
                                      r"портфолио|магазин|блог|галере|промо|визитк|одностраничн|"
-                                     r"статья|статью|эссе|лонгрид|документ|оглавлен|гайд|руководств|обзор", final_prompt, re.I))
+                                     r"статья|статью|эссе|лонгрид|документ|оглавлен|гайд|руководств|обзор|"
+                                     r"дашборд|dashboard|график|диаграмм|аналитик|панель|таблиц|калькулятор|"
+                                     r"приложени|трекер|каталог|викторин|квиз|планировщик|todo|список", final_prompt, re.I))
             complex_site = (is_game or is_site or len(final_prompt) > MULTIPASS_PROMPT_CHARS or
                             len(re.findall(r"секц|блок|hero|тариф|отзыв|футер|прайс|галере|раздел|"
                                            r"section|pricing|testimonial|footer|feature",
