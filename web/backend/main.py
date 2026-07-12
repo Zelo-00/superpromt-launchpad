@@ -458,10 +458,10 @@ async def gen_models():
     if os.environ.get("DEEPSEEK_API_KEY"):
         out += [
             {"id": "deepseek/deepseek-v4-flash", "name": "DeepSeek V4 Flash",
-             "hint": "быстро и дёшево", "segment": "server",
+             "hint": "сборка проектов · быстро (2–3 мин)", "segment": "server",
              "ctx": None, "prompt_price": None, "completion_price": None},
             {"id": "deepseek/deepseek-v4-pro", "name": "DeepSeek V4 Pro",
-             "hint": "максимум качества", "segment": "server",
+             "hint": "reasoning · для «Улучшить промт» (сборка идёт на Flash)", "segment": "server",
              "ctx": None, "prompt_price": None, "completion_price": None},
         ]
     return {"models": out}
@@ -842,7 +842,7 @@ _IMAGE_RULES = """
   что объект (напр. Chart) определён — иначе будет «Chart is not defined» и график не отрисуется."""
 
 
-def _gen_multipass(final_prompt, domain, skills_text, model, cfg, feedback="", is_game=False):
+def _gen_multipass(final_prompt, domain, skills_text, model, fast_model, cfg, feedback="", is_game=False):
     """МНОГОПРОХОДНАЯ генерация ПО ФАЙЛАМ: index.html → css/style.css → js/app.js, каждый со СВОИМ
     полным бюджетом токенов (против обрыва). HTML передаётся контекстом в CSS/JS для связности.
     is_game=True → JS-проход получает ИГРОВОЙ системный промпт (полная рабочая механика).
@@ -850,10 +850,10 @@ def _gen_multipass(final_prompt, domain, skills_text, model, cfg, feedback="", i
     fb = ("\n\nОБЯЗАТЕЛЬНО исправь замечания ревьюера предыдущей версии: " + feedback) if feedback else ""
     tokens = 0
 
-    def call(system, user, max_tok):
+    def call(system, user, max_tok, mdl=None):
         nonlocal tokens
-        r = providers.chat(model, [{"role": "system", "content": system},
-                                   {"role": "user", "content": user}],
+        r = providers.chat(mdl or model, [{"role": "system", "content": system},
+                                          {"role": "user", "content": user}],
                            max_tokens=max_tok, temperature=0.3, cfg=cfg, timeout=300)
         tokens += (r.get("usage", {}) or {}).get("total_tokens", 0)
         return r["text"]
@@ -874,14 +874,16 @@ def _gen_multipass(final_prompt, domain, skills_text, model, cfg, feedback="", i
                     "<script src=\"js/app.js\"></script> перед </body>; внешние либы — через CDN. НЕ пиши CSS/JS "
                     "инлайн (кроме мелких SVG). НЕ добавляй незапрошенных секций. Верни ОДИН блок ```html``` и всё."
                     + _IMAGE_RULES)
-    html = _extract_block(call(html_sys, final_prompt + fb, PER_FILE_MAX_TOKENS), ("html",))
+    html = _extract_block(call(html_sys, final_prompt + fb, PER_FILE_MAX_TOKENS,
+                               mdl=(fast_model if is_game else model)), ("html",))
 
     # Проход 2 — ПОЛНЫЙ CSS под этот HTML
     css_sys = ("Ты — expert CSS-разработчик. Дан HTML-файл. Сгенерируй ТОЛЬКО css/style.css — полностью, "
                "покрывая КАЖДУЮ секцию и класс из HTML (никаких пропущенных секций). CSS-переменные, "
                "flexbox/grid, адаптивность (@media), hover/переходы, аккуратная типографика и отступы. "
                "Верни ОДИН блок ```css``` и всё, без пояснений.")
-    css = _extract_block(call(css_sys, "HTML проекта:\n" + html[:16000], PER_FILE_MAX_TOKENS), ("css",))
+    css = _extract_block(call(css_sys, "HTML проекта:\n" + html[:16000], PER_FILE_MAX_TOKENS,
+                              mdl=fast_model), ("css",))
 
     # Проход 3 — JS
     if is_game:
@@ -903,7 +905,8 @@ def _gen_multipass(final_prompt, domain, skills_text, model, cfg, feedback="", i
                   "оборачивай в window.addEventListener('load', () => { ... }), чтобы библиотека успела "
                   "загрузиться (иначе «Chart is not defined»). "
                   "Верни ОДИН блок ```javascript``` и всё.")
-    js = _extract_block(call(js_sys, "HTML проекта:\n" + html[:16000], PER_FILE_MAX_TOKENS), ("javascript", "js"))
+    js = _extract_block(call(js_sys, "HTML проекта:\n" + html[:16000], PER_FILE_MAX_TOKENS,
+                             mdl=(model if is_game else fast_model)), ("javascript", "js"))
 
     parts = ["```html\n<!-- FILE: index.html -->\n%s\n```" % html,
              "```css\n/* FILE: css/style.css */\n%s\n```" % css]
@@ -958,13 +961,13 @@ const app = {{...}}
 - Каждая заявленная в задаче секция/форма/кнопка РЕАЛЬНО присутствует и рабочая.""" + _IMAGE_RULES
 
 
-def _produce_files(final_prompt, domain, skills_text, single_system, model, cfg, work_dir,
+def _produce_files(final_prompt, domain, skills_text, single_system, model, fast_model, cfg, work_dir,
                    feedback, complex_site, is_game):
     """ОДИН проход генерации → файлы в work_dir. Диспетчер режимов:
     сложный сайт/игра → многопроход по файлам (полный бюджет на каждый);
     простая задача → одношот (все файлы в одном ответе). -> (files_created, tokens, answer)."""
     if complex_site:
-        answer, tok = _gen_multipass(final_prompt, domain, skills_text, model, cfg,
+        answer, tok = _gen_multipass(final_prompt, domain, skills_text, model, fast_model, cfg,
                                      feedback, is_game=is_game)
     else:
         msgs = [{"role": "system", "content": single_system},
@@ -1010,8 +1013,9 @@ def _generate_sync(req: GenerateRequest):
 
             # 2. PSQ gate с интеграцией скиллов (3 cycles to ensure PSQ >= 0.8)
             from superprompt_cli import psq as spt_psq
+            # ГИБРИД: PSQ-гейт целиком на быстрой модели (судья + доводка промта) — Pro тут не нужен
             final_prompt, psq_before, psq_after = spt_psq.gate(
-                req.prompt, settings.judge_model, model,
+                req.prompt, settings.judge_model, settings.judge_model,
                 max_cycles=3, cfg=cfg, log=lambda m: None)
 
             # 3. Системный промпт одношота (для простых задач); сложное/игра идут многопроходом
@@ -1042,11 +1046,16 @@ def _generate_sync(req: GenerateRequest):
             for _cycle in range(MAX_BUILD_CYCLES):
                 if _cycle > 0:
                     work_dir = tempfile.mkdtemp(prefix="spt_gen_")   # свежая папка на повтор
+                # ГИБРИД: генерация кода — целиком на быстром кодере (Flash). Reasoning-модели
+                # (Pro) для многофайлового кода не годятся: reasoning съедает бюджет → усечённый код.
+                # Pro применяется на точечных задачах («Улучшить промт»), где важно качество одного ответа.
+                gen_model = settings.judge_model
                 files_created, tok, answer = _produce_files(
-                    base_user, domain, skills_text, system, model, cfg, work_dir,
+                    base_user, domain, skills_text, system, gen_model, gen_model, cfg, work_dir,
                     build_feedback, complex_site, is_game)
                 tokens_used += tok
-                verification = _verify_result(work_dir, files_created, req.prompt, model, cfg)
+                # ГИБРИД: ревьюер на быстрой модели
+                verification = _verify_result(work_dir, files_created, req.prompt, settings.judge_model, cfg)
                 verification["cycles"] = _cycle + 1
                 if verification.get("verdict") == "PASS":
                     break
