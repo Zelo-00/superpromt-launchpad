@@ -407,25 +407,41 @@ def _estimate_cost(model_spec, total_tokens):
     return round(total_tokens * blended, 6)
 
 
+def _segment(m):
+    """Сегмент по цене вывода за 1М токенов: free | cheap | mid | expensive."""
+    c = (m["completion_price"] or 0) * 1e6
+    if c <= 0:
+        return "free"
+    if c <= 1.0:
+        return "cheap"
+    if c <= 5.0:
+        return "mid"
+    return "expensive"
+
+
 @app.get("/api/or-models")
-async def or_models(coding: bool = True, limit: int = 30):
-    """Живой каталог моделей OpenRouter с ценами (публичный API, без ключа)."""
+async def or_models(per_segment: int = 20):
+    """Живой каталог моделей OpenRouter с ценами по сегментам (публичный API, без ключа).
+    Возвращает больше моделей: до per_segment в каждом сегменте (free/cheap/mid/expensive)."""
     models = _or_fetch_models()
-
-    def _key(m):
-        pc = m["completion_price"]
-        return (pc is None, pc if pc is not None else 1e9)
-
-    if coding:
-        allow = ("coder", "code", "qwen", "deepseek", "gpt-oss", "gpt-4o", "gpt-5",
-                 "gemini", "grok", "llama", "mistral", "glm", "kimi", "mimo")
-        models = [m for m in models if any(a in m["id"].lower() for a in allow)]
-    # отбрасываем модели-роутеры с плавающей ценой (-1) и без цены
+    # только валидные цены (без -1 «плавающих» роутеров и без None)
     models = [m for m in models
               if m["prompt_price"] is not None and m["prompt_price"] >= 0
               and m["completion_price"] is not None and m["completion_price"] >= 0]
-    models = sorted(models, key=_key)[:limit]
-    return {"models": models, "count": len(models)}
+    # исключаем не-чат модели (эмбеддинги/аудио/картинки/модерация)
+    deny = ("embed", "whisper", "tts", "dall-e", "moderation", "stable-diffusion",
+            "sdxl", "flux", "/bge", "rerank")
+    models = [m for m in models if not any(d in m["id"].lower() for d in deny)]
+
+    buckets = {"free": [], "cheap": [], "mid": [], "expensive": []}
+    for m in sorted(models, key=lambda x: (x["completion_price"], x["id"])):
+        s = _segment(m)
+        if len(buckets[s]) < per_segment:
+            m["segment"] = s
+            buckets[s].append(m)
+    ordered = buckets["free"] + buckets["cheap"] + buckets["mid"] + buckets["expensive"]
+    return {"models": ordered, "count": len(ordered),
+            "segments": {k: len(v) for k, v in buckets.items()}}
 
 
 @app.get("/api/models")

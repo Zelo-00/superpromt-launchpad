@@ -1422,9 +1422,13 @@
                             <div class="d"></div>
                             <span data-i18n="mode_kodik">Через Kodik — сразу результат</span>
                         </div>
-                        <div class="mi" id="mode-byok" onclick="setRunMode('byok')">
+                        <div class="mi" id="mode-openrouter" onclick="setRunMode('openrouter')">
                             <div class="d"></div>
-                            <span data-i18n="mode_byok">Свой ключ (BYOK)</span>
+                            <span data-i18n="mode_or">Свой ключ (OpenRouter)</span>
+                        </div>
+                        <div class="mi" id="mode-openai" onclick="setRunMode('openai')">
+                            <div class="d"></div>
+                            <span data-i18n="mode_openai">Свой ключ — прямой API (OpenAI-совместимый)</span>
                         </div>
                     </div>
                     <button class="settings-ok" onclick="closeSettings()" data-i18n="settings_ok">ОК</button>
@@ -1895,7 +1899,8 @@
                 settings_hint: "Без ключа — <b>базовый</b> режим. С ключом — <b>полноценный</b> прогон задачи.",
                 settings_mode: "Режим прогона",
                 mode_kodik: "Через Kodik — сразу результат",
-                mode_byok: "Свой ключ (BYOK)",
+                mode_or: "Свой ключ (OpenRouter)",
+                mode_openai: "Свой ключ — прямой API (OpenAI-совместимый)",
                 hero_title: "Опиши задачу — <b>получи готовый результат</b>",
                 hero_subtitle: "Приложи файлы и фото. Конвейер ИИ-агентов сам подберёт состав, доведёт постановку и соберёт результат — готовый архив с однокликовым запуском.",
                 subtitle: "Опишите задачу — SuperPromt сам доведёт постановку до идеала. Возиться с промтами вручную не нужно.",
@@ -1983,7 +1988,8 @@
                 settings_hint: "No key — <b>demo</b> result. With key — <b>real</b> task run.",
                 settings_mode: "Run Mode",
                 mode_kodik: "Via Kodik — instant result",
-                mode_byok: "Own Key (BYOK)",
+                mode_or: "Own key (OpenRouter)",
+                mode_openai: "Own key — direct API (OpenAI-compatible)",
                 hero_title: "Describe task — <b>get ready result</b>",
                 hero_subtitle: "Attach files and photos. AI agent pipeline will pick the team, refine the prompt and build the result — ready archive with one-click launch.",
                 subtitle: "Describe your task — SuperPromt perfects the prompt for you. No manual prompt tinkering required.",
@@ -3196,9 +3202,12 @@
         }
 
         function setRunMode(mode) {
+            if (mode === 'byok') mode = 'openrouter';          // миграция старого значения
+            if (!el(`mode-${mode}`)) mode = 'kodik';           // защита от неизвестного режима
             localStorage.setItem('superpromt_run_mode', mode);
             document.querySelectorAll('.mi').forEach(m => m.classList.remove('active'));
             el(`mode-${mode}`).classList.add('active');
+            if (typeof updateModelPrice === 'function') updateModelPrice();
         }
 
         function loadSettings() {
@@ -3260,9 +3269,21 @@
                 const sel = el('modelSelect');
                 if (!_orModels.length || !sel) { updateModelPrice(); return; }
                 const saved = localStorage.getItem('superpromt_model') || '';
-                sel.innerHTML = _orModels.map(m =>
-                    `<option value="openrouter/${m.id}">${esc(m.name)} (${fmtPrice(m.prompt_price)}/${fmtPrice(m.completion_price)} за 1М)</option>`
-                ).join('');
+                const groups = [
+                    ['free',      '🆓 Бесплатные'],
+                    ['cheap',     '💚 Дешёвые (до $1/1М)'],
+                    ['mid',       '💛 Средние ($1–5/1М)'],
+                    ['expensive', '🔴 Дорогие (>$5/1М)']
+                ];
+                let html = '';
+                for (const [seg, label] of groups) {
+                    const items = _orModels.filter(m => m.segment === seg);
+                    if (!items.length) continue;
+                    html += `<optgroup label="${label}">` + items.map(m =>
+                        `<option value="openrouter/${m.id}">${esc(m.name)} · ${fmtPrice(m.prompt_price)}/${fmtPrice(m.completion_price)} за 1М</option>`
+                    ).join('') + '</optgroup>';
+                }
+                sel.innerHTML = html;
                 if (_orModels.some(m => 'openrouter/' + m.id === saved)) sel.value = saved;
                 else localStorage.setItem('superpromt_model', sel.value);
                 updateModelPrice();
@@ -3275,7 +3296,13 @@
             const m = _orModels.find(x => x.id === id);
             if (!m) { badge.textContent = ''; return; }
             const ctx = m.ctx ? ` · контекст ${Math.round(m.ctx / 1000)}K` : '';
-            badge.innerHTML = `💲 Живая цена: ввод <b>${fmtPrice(m.prompt_price)}</b> · вывод <b>${fmtPrice(m.completion_price)}</b> за 1М токенов${ctx}`;
+            const mode = localStorage.getItem('superpromt_run_mode') || 'kodik';
+            if (mode === 'openai') {
+                // прямой OpenAI-совместимый API: цена провайдера неизвестна — показываем модель и контекст
+                badge.innerHTML = `🧩 Модель: <b>${esc(m.name)}</b>${ctx}`;
+            } else {
+                badge.innerHTML = `💲 Живая цена: ввод <b>${fmtPrice(m.prompt_price)}</b> · вывод <b>${fmtPrice(m.completion_price)}</b> за 1М токенов${ctx}`;
+            }
         }
         function renderSpend() {
             const bar = el('spendBar'); if (!bar) return;
