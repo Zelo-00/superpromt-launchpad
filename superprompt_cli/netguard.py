@@ -569,7 +569,7 @@ def verify_text(text, timeout=15, workers=12, strict=False, pkgs=True, wayback=T
 
 
 def main():
-    ap = argparse.ArgumentParser(description="KSCR typed-VETO: url/doi")
+    ap = argparse.ArgumentParser(description="typed-VETO выхода: url/doi")
     ap.add_argument("file", help="файл с текстом результата (- = stdin)")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--strict", action="store_true",

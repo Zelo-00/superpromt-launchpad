@@ -1,5 +1,5 @@
 """Расширенные возможности spt (P1+P2 бэклога): Max Mode и Goal-механизм.
-Оба проходят ТОТ ЖЕ KSCR-гейт — уникальная связка spt (у MiMo Max Mode есть, но без
+Оба проходят ТОТ ЖЕ гейт выхода — уникальная связка spt (у MiMo Max Mode есть, но без
 анти-фабрикационного гейта поверх)."""
 
 from . import agentloop, providers
@@ -52,7 +52,7 @@ def _goal_line(met, why, rnd, total):
 
 
 def max_mode(task, cfg, args, run_task_fn, n=3, log=print):
-    """Max Mode ⭐: N кандидатов (разные температуры) → судья выбирает → KSCR-гейт.
+    """Max Mode ⭐: N кандидатов (разные температуры) → судья выбирает → гейт выхода.
     Уникально: судья + анти-фабрикационный гейт поверх (у MiMo гейта нет).
     run_task_fn — замыкание, принимающее (task, temperature) и возвращающее res."""
     log(_node("Max Mode · %d кандидата" % n, cyan(G["tool"])))
