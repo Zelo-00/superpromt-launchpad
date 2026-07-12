@@ -643,7 +643,9 @@ def _verify_result(work_dir, files_created, prompt, model, cfg):
     # ссылки на локальные css/js разрешаются в созданные файлы
     made = {f["path"].replace("\\", "/") for f in files_created}
     refs = re.findall(r'(?:href|src)="([^"]+)"', html, re.I)
-    local = [r for r in refs if not r.startswith(("http", "//", "#", "data:", "mailto:"))]
+    # локальными считаем только относительные пути; любой URI-схема (tel:/mailto:/http:/javascript:/
+    # data:/blob:…), protocol-relative // и якоря # — внешние, не проверяем как файлы
+    local = [r for r in refs if r and not re.match(r'^(?:[a-z][a-z0-9+.\-]*:|//|#)', r, re.I)]
     broken = [r for r in local if r.lstrip("./") not in made
               and os.path.normpath(r) not in {os.path.normpath(m) for m in made}]
     chk("локальные ссылки разрешаются", not broken,
