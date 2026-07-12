@@ -350,6 +350,60 @@ async def get_status():
         "llm_configured": has_llm
     }
 
+@app.get("/api/models")
+async def get_models():
+    """Список доступных моделей для BYOK"""
+    import superprompt_cli.providers as prov
+    try:
+        cfg = prov.config.load()
+        models = []
+        for prov_name, prov_cfg in cfg.get("providers", {}).items():
+            if prov_cfg.get("local"):
+                continue
+            # Добавляем базовые модели для каждого провайдера
+            if prov_name == "openrouter":
+                models.extend([
+                    {"id": "openrouter/qwen/qwen3-coder-next", "name": "Qwen3 Coder Next", "provider": "openrouter", "price": "mid"},
+                    {"id": "openrouter/qwen/qwen3-coder-plus", "name": "Qwen3 Coder Plus", "provider": "openrouter", "price": "high"},
+                    {"id": "openrouter/deepseek/deepseek-v4-flash", "name": "DeepSeek V4 Flash", "provider": "openrouter", "price": "low"},
+                ])
+            elif prov_name == "openai":
+                models.append({"id": "openai/gpt-4o", "name": "GPT-4o", "provider": "openai", "price": "high"})
+            elif prov_name == "anthropic":
+                models.append({"id": "anthropic/claude-sonnet-4-5", "name": "Claude Sonnet 4.5", "provider": "anthropic", "price": "high"})
+        return {"models": models}
+    except Exception as e:
+        return {"models": [], "error": str(e)}
+
+@app.post("/api/verify")
+async def verify_key(request: Request):
+    """Проверка API-ключа"""
+    try:
+        body = await request.json()
+        key = body.get("key", "")
+        provider = body.get("provider", "openrouter")
+        
+        if not key:
+            return {"valid": False, "error": "Ключ не указан"}
+        
+        # Проверяем ключ через OpenRouter API
+        import urllib.request
+        import json
+        
+        req = urllib.request.Request(
+            "https://openrouter.ai/api/v1/models",
+            headers={"Authorization": f"Bearer {key}"}
+        )
+        resp = urllib.request.urlopen(req, timeout=10)
+        data = json.loads(resp.read())
+        
+        if "data" in data and len(data["data"]) > 0:
+            return {"valid": True, "provider": provider, "models_count": len(data["data"])}
+        else:
+            return {"valid": False, "error": "Неверный ключ"}
+    except Exception as e:
+        return {"valid": False, "error": str(e)}
+
 @app.post("/api/psq", response_model=PSQResponse)
 async def calculate_psq(req: PSQRequest):
     try:

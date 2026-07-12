@@ -1398,8 +1398,21 @@
                 </button>
                 <div class="settings-dropdown" id="settingsDropdown">
                     <h4 data-i18n="settings_api_key">Ключ API · BYOK</h4>
-                    <input class="key-input" id="apikey" placeholder="sk-..." oninput="saveSettings()">
-                     <p class="khint" data-i18n="settings_hint">Без ключа — <b>базовый</b> режим. С ключом — <b>полноценный</b> прогон задачи.</p>
+                    <div style="display:flex;gap:0.4rem;margin-bottom:0.5rem">
+                        <input class="key-input" id="apikey" placeholder="sk-..." oninput="saveSettings()" style="flex:1;margin-bottom:0">
+                        <button id="verifyKeyBtn" onclick="verifyApiKey()" style="padding:0 .7rem;border-radius:10px;border:1px solid var(--line);background:var(--field);color:var(--text);cursor:pointer;font-size:.78rem;white-space:nowrap">Проверить</button>
+                    </div>
+                    <div id="keyStatus" class="khint" style="display:none;margin-top:0"></div>
+                    <p class="khint" data-i18n="settings_hint">Без ключа — <b>базовый</b> режим. С ключом — <b>полноценный</b> прогон задачи.</p>
+                    <div class="sdiv"></div>
+                    <h4>Модель для генерации</h4>
+                    <select id="modelSelect" class="key-input" style="margin-bottom:0.5rem" onchange="saveModel()">
+                        <option value="openai/qwen/qwen3-coder-next">Qwen3 Coder Next (mid, $0.11/$0.80)</option>
+                        <option value="openai/qwen/qwen3-coder-plus">Qwen3 Coder Plus (high, $0.65/$3.25)</option>
+                        <option value="openai/qwen/qwen3-coder-flash">Qwen3 Coder Flash (low, $0.20/$0.97)</option>
+                        <option value="openai/deepseek/deepseek-v4-flash">DeepSeek V4 Flash (low)</option>
+                        <option value="openai/qwen/qwen3.6-max-preview">Qwen3.6 Max Preview (high)</option>
+                    </select>
                     <div class="sdiv"></div>
                     <h4 data-i18n="settings_mode">Режим прогона</h4>
                     <div class="mode-select">
@@ -3190,7 +3203,40 @@
             el('apikey').value = key;
             const mode = localStorage.getItem('superpromt_run_mode') || 'kodik';
             setRunMode(mode);
+            const model = localStorage.getItem('superpromt_model') || 'openai/qwen/qwen3-coder-next';
+            if (el('modelSelect')) el('modelSelect').value = model;
             markMode();
+            if (key) verifyApiKey();
+        }
+
+        async function verifyApiKey() {
+            const key = el('apikey').value.trim();
+            const status = el('keyStatus');
+            if (!key) { status.style.display = 'none'; return; }
+            status.style.display = 'block';
+            status.innerHTML = '<span style="color:var(--ash)">Проверяю ключ...</span>';
+            try {
+                const res = await fetch('/api/verify', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({key: key})
+                });
+                const data = await res.json();
+                if (data.valid) {
+                    status.innerHTML = `<span style="color:#4ad07a">✓ Ключ действителен · ${data.models_count} моделей доступно</span>`;
+                    localStorage.setItem('superpromt_api_key', key);
+                    markMode();
+                } else {
+                    status.innerHTML = `<span style="color:#e5484d">✗ ${data.error || 'Неверный ключ'}</span>`;
+                }
+            } catch(e) {
+                status.innerHTML = `<span style="color:#e5484d">✗ Ошибка проверки</span>`;
+            }
+        }
+
+        function saveModel() {
+            const model = el('modelSelect').value;
+            localStorage.setItem('superpromt_model', model);
         }
 
         function markMode() {

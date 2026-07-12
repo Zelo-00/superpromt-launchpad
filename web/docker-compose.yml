@@ -1,18 +1,17 @@
-# Поднять веб-приложение одной командой:
-#   cd web && docker compose up --build
-# Открыть: http://localhost:8000
 services:
   backend:
     build:
-      context: ..                       # корень репозитория (нужен superprompt_cli и skills)
+      context: ..
       dockerfile: web/backend/Dockerfile
     image: superpromt-web:latest
     ports:
       - "8000:8000"
     environment:
       - DEBUG=false
-      # Глубокая оценка судьёй (опционально): модель в формате «провайдер/модель» + ключ.
-      # Без ключа приложение работает по детерминированному pre-скринингу (короткие/накрученные промты).
-      # - JUDGE_MODEL=openai/gpt-4o
-      # - OPENAI_API_KEY=sk-...
+      - JUDGE_MODEL=${JUDGE_MODEL:-openrouter/qwen/qwen3-coder-next}
+      - REPAIR_MODEL=${REPAIR_MODEL:-openrouter/qwen/qwen3-coder-next}
+      # BYOK: ключ берётся ИЗ ОКРУЖЕНИЯ (или web/.env), в репозиторий не коммитим.
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:8000,http://127.0.0.1:8000,https://superpromt.site}
     restart: unless-stopped
