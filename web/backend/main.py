@@ -1079,10 +1079,28 @@ def _extract_upload_text(file_ids, max_total=30000):
     return "\n\n".join(parts)
 
 
+def _valid_image(path, min_side=16):
+    """Валидна ли картинка: открывается, не обрезана, не вырожденная (>= min_side px).
+    Битые/1×1/усечённые изображения роняют качество результата — их надо отсеять."""
+    try:
+        from PIL import Image
+        with Image.open(path) as im:
+            im.verify()                       # проверка целостности файла
+        with Image.open(path) as im:          # verify() «расходует» объект — открываем заново для размера
+            w, h = im.size
+        return w >= min_side and h >= min_side
+    except Exception:  # noqa: BLE001 — нет PIL или битый файл → лёгкая проверка по размеру
+        try:
+            return os.path.getsize(path) > 1024
+        except OSError:
+            return False
+
+
 def _collect_upload_images(file_ids):
     """Прикреплённые КАРТИНКИ (по id) → список медиа для вставки в сайт как <img>.
     Возвращает [{'src': 'media/media-1.png', 'path': <диск>, 'ext': '.png'}].
-    Содержимое картинки не «читается» — файл копируется в вывод и показывается как медиа."""
+    Содержимое картинки не «читается» — файл копируется в вывод и показывается как медиа.
+    Битые/вырожденные картинки пропускаются, чтобы не портить результат."""
     out = []
     for fid in (file_ids or [])[:MAX_FILES]:
         path = _upload_path(fid)
@@ -1091,6 +1109,8 @@ def _collect_upload_images(file_ids):
         ext = os.path.splitext(path)[1].lower()
         if ext not in _IMAGE_EXT:
             continue
+        if not _valid_image(path):
+            continue                          # битую картинку не встраиваем
         n = len(out) + 1
         out.append({"src": "media/media-%d%s" % (n, ext), "path": path, "ext": ext})
     return out
@@ -1636,8 +1656,18 @@ async def upload_files(files: List[UploadFile] = File(...)):
                 raise HTTPException(status_code=422, detail="Файл '%s' превышает 10 МБ" % (f.filename or ""))
             chunks.append(chunk)
         fid = uuid.uuid4().hex
-        with open(os.path.join(UPLOAD_DIR, fid + ext), "wb") as out:
+        dest = os.path.join(UPLOAD_DIR, fid + ext)
+        with open(dest, "wb") as out:
             out.write(b"".join(chunks))
+        # битую/вырожденную картинку сразу отклоняем — иначе она портит результат
+        if ext in _IMAGE_EXT and not _valid_image(dest):
+            try:
+                os.remove(dest)
+            except OSError:
+                pass
+            raise HTTPException(status_code=422,
+                                detail="Изображение «%s» повреждено или слишком маленькое — приложите другое"
+                                       % (f.filename or ""))
         saved.append({"id": fid, "name": os.path.basename(f.filename or (fid + ext)),
                       "size": total, "content_type": f.content_type or "application/octet-stream"})
     return {"files": saved}

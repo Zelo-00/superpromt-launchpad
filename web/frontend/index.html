@@ -554,7 +554,16 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            gap: 0.75rem;
+            flex-wrap: wrap;
             margin-bottom: 1rem;
+        }
+        .repair-header h3 { min-width: 0; }
+        @media (max-width: 560px) {
+            .repair-header { flex-direction: column; align-items: stretch; }
+            .repair-header h3 { margin-bottom: 0.25rem; }
+            .repair-header .repair-actions { width: 100%; }
+            .repair-header .repair-actions .example-btn { flex: 1; text-align: center; }
         }
         .repair-content {
             background: var(--void);
